@@ -1,0 +1,78 @@
+/* ============================================================
+   ERP Design Tokens — source of truth for ALL form styling
+   Import this file once in main.tsx (after index.css)
+   ============================================================ */
+
+:root {
+  /* Brand */
+  --erp-brand:           #2C6B2F;
+  --erp-brand-hover:     #1E4B21;
+  --erp-brand-ring:      rgba(44, 107, 47, 0.15);
+
+  /* Labels */
+  --erp-label-color:     #333333;
+  --erp-label-size:      14px;
+  --erp-label-weight:    600;
+
+  /* Inputs */
+  --erp-input-height:    40px;
+  --erp-input-px:        12px;
+  --erp-input-py:        8px;
+  --erp-input-border:    #D0D0D0;
+  --erp-input-radius:    4px;
+  --erp-input-color:     #1A1A1A;
+  --erp-input-bg:        #ffffff;
+
+  /* Placeholder */
+  --erp-placeholder:     #999999;
+
+  /* Focus */
+  --erp-focus-border:    #2C6B2F;
+  --erp-focus-shadow:    0 0 0 3px rgba(44, 107, 47, 0.15);
+
+  /* Error */
+  --erp-error-border:    #D32F2F;
+  --erp-error-shadow:    0 0 0 3px rgba(211, 47, 47, 0.15);
+  --erp-error-color:     #D32F2F;
+
+  /* Helper / optional */
+  --erp-helper-color:    #666666;
+  --erp-helper-size:     12px;
+  --erp-optional-color:  #888888;
+  --erp-optional-size:   12px;
+
+  /* Section titles */
+  --erp-section-color:   #2C3E50;
+  --erp-section-size:    16px;
+  --erp-section-weight:  700;
+
+  /* Dividers */
+  --erp-divider:         #E8E8E8;
+  --erp-divider-width:   2px;
+
+  /* Spacing */
+  --erp-form-padding:    24px;
+  --erp-field-gap:       16px;
+  --erp-section-gap:     24px;
+  --erp-label-gap:       4px;
+
+  /* Buttons */
+  --erp-btn-height:      44px;
+  --erp-btn-px:          28px;
+  --erp-btn-py:          10px;
+  --erp-btn-radius:      4px;
+  --erp-btn-gap:         12px;
+
+  --erp-btn-primary-bg:      #2C6B2F;
+  --erp-btn-primary-hover:   #1E4B21;
+  --erp-btn-primary-color:   #ffffff;
+
+  --erp-btn-secondary-bg:    transparent;
+  --erp-btn-secondary-hover: #F5F5F5;
+  --erp-btn-secondary-border:#999999;
+  --erp-btn-secondary-color: #555555;
+
+  /* Surface */
+  --erp-surface-alt:     #f7f8fa;
+  --erp-surface-border:  #D0D0D0;
+}
