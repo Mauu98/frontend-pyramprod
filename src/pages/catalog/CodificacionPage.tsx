@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -818,15 +818,31 @@ function TypeForm({ item, familyId, familyLabel, onSave, onClose }: {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
+const SEL_KEY = 'codificacion:selection'
+
+function readSavedSelection(): { selCat: Category | null; selFam: Family | null; selType: ItemType | null; selItem: ItemSummary | null } {
+  try {
+    const raw = sessionStorage.getItem(SEL_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  return { selCat: null, selFam: null, selType: null, selItem: null }
+}
+
 export function CodificacionPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
 
-  const [selCat,  setSelCat]  = useState<Category | null>(null)
-  const [selFam,  setSelFam]  = useState<Family | null>(null)
-  const [selType, setSelType] = useState<ItemType | null>(null)
-  const [selItem, setSelItem] = useState<ItemSummary | null>(null)
+  const saved = readSavedSelection()
+  const [selCat,  setSelCat]  = useState<Category | null>(saved.selCat)
+  const [selFam,  setSelFam]  = useState<Family | null>(saved.selFam)
+  const [selType, setSelType] = useState<ItemType | null>(saved.selType)
+  const [selItem, setSelItem] = useState<ItemSummary | null>(saved.selItem)
   const [sheet,   setSheet]   = useState<SheetKind>(null)
+
+  useEffect(() => {
+    sessionStorage.setItem(SEL_KEY, JSON.stringify({ selCat, selFam, selType, selItem }))
+  }, [selCat, selFam, selType, selItem])
   const [editCat,  setEditCat]  = useState<Category | null>(null)
   const [editFam,  setEditFam]  = useState<Family | null>(null)
   const [editType, setEditType] = useState<ItemType | null>(null)
