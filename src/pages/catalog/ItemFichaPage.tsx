@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft, Package2, AlertTriangle, Pencil, Trash2, Plus, Check, X, Search,
-  Image as ImageIcon, Download,
+  Image as ImageIcon, Download, Share2, Copy, ChevronDown, ChevronRight, Layers,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import type { ItemDetail } from '@/types/api.types'
@@ -16,6 +16,9 @@ import { inputBase } from '@/components/ui/form-tokens'
 
 interface FormulaLine {
   id: number
+  productId: number
+  productCode: string
+  productName: string
   componentId: number
   componentCode: string
   componentName: string
@@ -30,6 +33,22 @@ interface ItemSearchResult {
   fullCode: string
   fullName: string
   abbreviation: string | null
+}
+
+interface ExplosionLine {
+  depth: number
+  componentId: number
+  componentCode: string
+  componentName: string
+  accumulatedQuantity: number
+  unit: string | null
+}
+
+interface ExplosionResult {
+  productId: number
+  productCode: string
+  productName: string
+  lines: ExplosionLine[]
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -221,6 +240,222 @@ function FormulaRow({
   )
 }
 
+// ─── Add-to-product dialog (agregar destino) ──────────────────────────────────
+
+function AddToProductDialog({ open, onClose, componentId, componentCode, onSaved }: {
+  open: boolean
+  onClose: () => void
+  componentId: number
+  componentCode: string
+  onSaved: () => void
+}) {
+  const [searchText, setSearchText] = useState('')
+  const [results, setResults] = useState<ItemSearchResult[]>([])
+  const [selected, setSelected] = useState<ItemSearchResult | null>(null)
+  const [showDrop, setShowDrop] = useState(false)
+  const [quantity, setQuantity] = useState('')
+  const [apiError, setApiError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    if (!open) {
+      setSearchText(''); setResults([]); setSelected(null)
+      setShowDrop(false); setQuantity(''); setApiError(null)
+    }
+  }, [open])
+
+  const handleSearch = (text: string) => {
+    setSearchText(text)
+    setSelected(null)
+    clearTimeout(debounceRef.current)
+    if (text.length < 2) { setResults([]); setShowDrop(false); return }
+    debounceRef.current = setTimeout(async () => {
+      const res = await apiClient.get(`/items/search?q=${encodeURIComponent(text)}`)
+      setResults(res.data)
+      setShowDrop(true)
+    }, 300)
+  }
+
+  const mut = useMutation({
+    mutationFn: (_: undefined) => apiClient.post('/formulas', {
+      productId: selected!.id,
+      componentId,
+      quantity: Number(quantity),
+    }),
+    onSuccess: () => { onSaved(); onClose() },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setApiError(msg ?? 'No se pudo agregar el destino.')
+    },
+  })
+
+  const canSubmit = selected && quantity && Number(quantity) > 0
+
+  return (
+    <FormDialog open={open} title={`Agregar ${componentCode} a una fórmula`} onClose={onClose} width="w-[500px]">
+      <form
+        onSubmit={e => { e.preventDefault(); if (canSubmit) mut.mutate(undefined) }}
+        className="flex flex-col gap-7"
+      >
+        <div className="flex flex-col gap-2">
+          <label className="text-[14px] font-medium text-[#344054]">
+            Producto destino <span className="ml-1 text-red-500">*</span>
+          </label>
+          <p className="text-[13px] text-[#98A2B3]">
+            Seleccioná el producto cuya fórmula recibirá este ítem como componente.
+          </p>
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
+            <input
+              value={selected ? `${selected.fullCode} — ${selected.fullName}` : searchText}
+              onChange={e => handleSearch(e.target.value)}
+              onFocus={() => {
+                if (selected) { setSelected(null); setSearchText('') }
+                if (results.length) setShowDrop(true)
+              }}
+              className={cn(inputBase, 'pl-9')}
+              placeholder="Buscar producto por código o nombre..."
+            />
+            {showDrop && results.length > 0 && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
+                {results.slice(0, 8).map(r => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => { setSelected(r); setShowDrop(false) }}
+                    className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
+                  >
+                    <span className="shrink-0 font-mono text-[12px] text-[#667085]">{r.fullCode}</span>
+                    <span className="text-[14px] text-[#101828]">{r.fullName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-[14px] font-medium text-[#344054]">
+            Cantidad <span className="ml-1 text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            step="0.001"
+            min="0.001"
+            value={quantity}
+            onChange={e => setQuantity(e.target.value)}
+            className={cn(inputBase, 'text-right')}
+            placeholder="1.000"
+          />
+        </div>
+
+        {apiError && <ErrorBanner message={apiError} />}
+        <FormActions pending={mut.isPending} isEdit={false} label="Agregar a fórmula" onClose={onClose} />
+      </form>
+    </FormDialog>
+  )
+}
+
+// ─── Destinos section (where-used) ────────────────────────────────────────────
+
+function DestinosSection({ itemId, itemCode }: { itemId: number; itemCode: string }) {
+  const qc = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
+
+  const { data: lines = [], isLoading } = useQuery<FormulaLine[]>({
+    queryKey: ['destinos', itemId],
+    queryFn: () => apiClient.get<FormulaLine[]>(`/formulas/by-component?componentId=${itemId}`).then(r => r.data),
+  })
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['destinos', itemId] })
+
+  const downloadIndirect = async () => {
+    const res = await apiClient.get<Blob>(`/items/${itemId}/ancestors/export`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `destinos-indirectos-${itemCode}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="rounded-xl border border-[#E4E7EC] bg-white">
+      <div className="flex items-center justify-between border-b border-[#F2F4F7] px-6 py-4">
+        <div className="flex items-center gap-3">
+          <h3 className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#667085]">
+            Destinos (donde se usa)
+          </h3>
+          {lines.length > 0 && (
+            <span className="rounded-full bg-[#F2F4F7] px-2 py-0.5 text-[12px] font-semibold text-[#344054]">
+              {lines.length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadIndirect}
+            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-1.5 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB]"
+            title="Exportar destinos directos e indirectos"
+          >
+            <Download size={13} strokeWidth={2} />
+            Indirectos
+          </button>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-[#2C6B2F] px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-[#245A27] transition-colors"
+          >
+            <Share2 size={13} strokeWidth={2.5} />
+            Agregar destino
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="px-6 py-8 text-center text-[13px] text-[#98A2B3]">Cargando...</div>
+      ) : lines.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-10 text-[#98A2B3]">
+          <Package2 size={28} strokeWidth={1.5} />
+          <p className="text-[14px]">Este ítem no está incluido en ninguna fórmula</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[14px]">
+            <thead>
+              <tr className="border-b border-[#F2F4F7] text-left">
+                <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Producto</th>
+                <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Nombre</th>
+                <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Cantidad</th>
+                <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Memo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map(line => (
+                <tr key={line.id} className="border-b border-[#F2F4F7] hover:bg-[#F9FAFB]">
+                  <td className="px-6 py-3 font-mono text-[13px] text-[#344054]">{line.productCode}</td>
+                  <td className="px-3 py-3 text-[14px] text-[#101828]">{line.productName}</td>
+                  <td className="px-3 py-3 text-right text-[14px] font-semibold text-[#101828]">
+                    {line.quantity.toLocaleString('es-AR', { minimumFractionDigits: 3 })}
+                  </td>
+                  <td className="px-3 py-3 text-[13px] text-[#667085]">{line.memo ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <AddToProductDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        componentId={itemId}
+        componentCode={itemCode}
+        onSaved={invalidate}
+      />
+    </div>
+  )
+}
+
 // ─── Add formula dialog ────────────────────────────────────────────────────────
 
 function AddFormulaDialog({ open, onClose, productId, onSaved }: {
@@ -408,6 +643,227 @@ function ImageSection({ itemId }: { itemId: number }) {
   )
 }
 
+// ─── Copy formula dialog ──────────────────────────────────────────────────────
+
+function CopyFormulaDialog({ open, onClose, targetProductId, onSaved }: {
+  open: boolean
+  onClose: () => void
+  targetProductId: number
+  onSaved: () => void
+}) {
+  const [searchText, setSearchText] = useState('')
+  const [results, setResults] = useState<ItemSearchResult[]>([])
+  const [selected, setSelected] = useState<ItemSearchResult | null>(null)
+  const [showDrop, setShowDrop] = useState(false)
+  const [onDuplicate, setOnDuplicate] = useState<'SKIP' | 'ADD_QUANTITY'>('SKIP')
+  const [apiError, setApiError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    if (!open) {
+      setSearchText(''); setResults([]); setSelected(null)
+      setShowDrop(false); setOnDuplicate('SKIP'); setApiError(null)
+    }
+  }, [open])
+
+  const handleSearch = (text: string) => {
+    setSearchText(text)
+    setSelected(null)
+    clearTimeout(debounceRef.current)
+    if (text.length < 2) { setResults([]); setShowDrop(false); return }
+    debounceRef.current = setTimeout(async () => {
+      const res = await apiClient.get(`/items/search?q=${encodeURIComponent(text)}`)
+      setResults(res.data)
+      setShowDrop(true)
+    }, 300)
+  }
+
+  const mut = useMutation({
+    mutationFn: (_: undefined) => apiClient.post('/formulas/copy', {
+      sourceProductId: selected!.id,
+      targetProductId,
+      onDuplicate,
+    }),
+    onSuccess: () => { onSaved(); onClose() },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setApiError(msg ?? 'No se pudo copiar la fórmula.')
+    },
+  })
+
+  return (
+    <FormDialog open={open} title="Copiar fórmula de otro producto" onClose={onClose} width="w-[520px]">
+      <form
+        onSubmit={e => { e.preventDefault(); if (selected) mut.mutate(undefined) }}
+        className="flex flex-col gap-7"
+      >
+        <div className="flex flex-col gap-2">
+          <label className="text-[14px] font-medium text-[#344054]">
+            Producto origen <span className="ml-1 text-red-500">*</span>
+          </label>
+          <p className="text-[13px] text-[#98A2B3]">
+            Las líneas de su fórmula se copiarán a este producto.
+          </p>
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
+            <input
+              value={selected ? `${selected.fullCode} — ${selected.fullName}` : searchText}
+              onChange={e => handleSearch(e.target.value)}
+              onFocus={() => {
+                if (selected) { setSelected(null); setSearchText('') }
+                if (results.length) setShowDrop(true)
+              }}
+              className={cn(inputBase, 'pl-9')}
+              placeholder="Buscar producto origen..."
+            />
+            {showDrop && results.length > 0 && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
+                {results.slice(0, 8).map(r => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => { setSelected(r); setShowDrop(false) }}
+                    className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
+                  >
+                    <span className="shrink-0 font-mono text-[12px] text-[#667085]">{r.fullCode}</span>
+                    <span className="text-[14px] text-[#101828]">{r.fullName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <label className="text-[14px] font-medium text-[#344054]">Si un componente ya existe en la fórmula</label>
+          <div className="flex flex-col gap-2">
+            {([
+              ['SKIP', 'Ignorar (mantener cantidad original)'],
+              ['ADD_QUANTITY', 'Sumar la cantidad copiada'],
+            ] as const).map(([val, label]) => (
+              <label key={val} className="flex cursor-pointer items-center gap-3">
+                <input
+                  type="radio"
+                  name="onDuplicate"
+                  value={val}
+                  checked={onDuplicate === val}
+                  onChange={() => setOnDuplicate(val)}
+                  className="accent-[#2C6B2F]"
+                />
+                <span className="text-[14px] text-[#344054]">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {apiError && <ErrorBanner message={apiError} />}
+        <FormActions pending={mut.isPending} isEdit={false} label="Copiar fórmula" onClose={onClose} />
+      </form>
+    </FormDialog>
+  )
+}
+
+// ─── BOM explosion section ────────────────────────────────────────────────────
+
+function ExplosionSection({ itemId, itemCode }: { itemId: number; itemCode: string }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const { data, isLoading } = useQuery<ExplosionResult>({
+    queryKey: ['explosion', itemId],
+    queryFn: () => apiClient.get<ExplosionResult>(`/items/${itemId}/explosion`).then(r => r.data),
+    enabled: expanded,
+  })
+
+  const downloadExplosion = async () => {
+    const res = await apiClient.get<Blob>(`/items/${itemId}/explosion/export`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${itemCode}_explosion.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const lines = data?.lines ?? []
+
+  return (
+    <div className="rounded-xl border border-[#E4E7EC] bg-white">
+      <div className="flex items-center justify-between border-b border-[#F2F4F7] px-6 py-4">
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-[#667085]"
+        >
+          {expanded ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
+          <Layers size={14} strokeWidth={2} />
+          Explosión BOM
+          {expanded && lines.length > 0 && (
+            <span className="ml-1 rounded-full bg-[#F2F4F7] px-2 py-0.5 text-[11px] font-semibold text-[#344054]">
+              {lines.length}
+            </span>
+          )}
+        </button>
+        {expanded && (
+          <button
+            onClick={downloadExplosion}
+            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-1.5 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB]"
+          >
+            <Download size={13} strokeWidth={2} />
+            Exportar XLS
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        isLoading ? (
+          <div className="px-6 py-8 text-center text-[13px] text-[#98A2B3]">Calculando explosión...</div>
+        ) : lines.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-[#98A2B3]">
+            <Layers size={28} strokeWidth={1.5} />
+            <p className="text-[14px]">Este producto no tiene componentes</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[14px]">
+              <thead>
+                <tr className="border-b border-[#F2F4F7] text-left">
+                  <th className="w-12 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Niv.</th>
+                  <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Código</th>
+                  <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Nombre</th>
+                  <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Cant. Acum.</th>
+                  <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Unidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, i) => {
+                  const indent = '    '.repeat(line.depth)
+                  const depthColors = ['text-[#101828]', 'text-[#344054]', 'text-[#667085]', 'text-[#98A2B3]']
+                  const color = depthColors[Math.min(line.depth, depthColors.length - 1)]
+                  return (
+                    <tr key={`${line.componentId}-${i}`} className="border-b border-[#F2F4F7] hover:bg-[#F9FAFB]">
+                      <td className="px-6 py-2.5 text-[12px] text-[#98A2B3]">{line.depth + 1}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="font-mono text-[13px] text-[#667085]">{indent}</span>
+                        <span className={cn('font-mono text-[13px]', color)}>{line.componentCode}</span>
+                      </td>
+                      <td className={cn('px-3 py-2.5 text-[14px]', color)}>
+                        {indent}{line.componentName}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-[#101828]">
+                        {line.accumulatedQuantity.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 6 })}
+                      </td>
+                      <td className="px-3 py-2.5 text-[13px] text-[#667085]">{line.unit ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
 // ─── BOM section ──────────────────────────────────────────────────────────────
 
 function FormulaSection({ itemId }: { itemId: number }) {
@@ -415,6 +871,7 @@ function FormulaSection({ itemId }: { itemId: number }) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [copyOpen, setCopyOpen] = useState(false)
 
   const { data: lines = [] } = useQuery<FormulaLine[]>({
     queryKey: ['formulas', itemId],
@@ -440,13 +897,23 @@ function FormulaSection({ itemId }: { itemId: number }) {
         <h3 className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#667085]">
           Fórmula / BOM
         </h3>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg bg-[#2C6B2F] px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-[#245A27] transition-colors"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          Agregar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCopyOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-1.5 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB]"
+            title="Copiar fórmula de otro producto"
+          >
+            <Copy size={13} strokeWidth={2} />
+            Copiar BOM
+          </button>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-[#2C6B2F] px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-[#245A27] transition-colors"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            Agregar
+          </button>
+        </div>
       </div>
 
       {lines.length === 0 ? (
@@ -496,6 +963,13 @@ function FormulaSection({ itemId }: { itemId: number }) {
         productId={itemId}
         onSaved={invalidate}
       />
+
+      <CopyFormulaDialog
+        open={copyOpen}
+        onClose={() => setCopyOpen(false)}
+        targetProductId={itemId}
+        onSaved={invalidate}
+      />
     </div>
   )
 }
@@ -503,9 +977,15 @@ function FormulaSection({ itemId }: { itemId: number }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ItemFichaPage({ itemId }: { itemId: number }) {
+  const navigate = useNavigate()
   const { data: item, isLoading } = useQuery<ItemDetail>({
     queryKey: ['item-detail', itemId],
     queryFn: () => apiClient.get<ItemDetail>(`/items/${itemId}`).then(r => r.data),
+  })
+
+  const cloneMut = useMutation({
+    mutationFn: () => apiClient.post<ItemDetail>(`/items/${itemId}/clone`),
+    onSuccess: (res) => navigate({ to: '/app/catalog/items/$itemId', params: { itemId: String(res.data.id) } }),
   })
 
   if (isLoading) {
@@ -522,16 +1002,6 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
     : 'success'
 
   const hasNotes = item.productionMemo || item.observations || item.operationComplement
-
-  const downloadDestinos = async () => {
-    const res = await apiClient.get<Blob>(`/items/${itemId}/export/used-in`, { responseType: 'blob' })
-    const url = URL.createObjectURL(res.data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `destinos-${item.fullCode}.xlsx`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#f4f5f7]">
@@ -553,12 +1023,13 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
-            onClick={downloadDestinos}
-            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-2 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB]"
-            title="Exportar destinos (usado en)"
+            onClick={() => cloneMut.mutate()}
+            disabled={cloneMut.isPending}
+            title="Clonar ítem"
+            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-1.5 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB] disabled:opacity-50"
           >
-            <Download size={14} strokeWidth={2} />
-            Destinos
+            <Copy size={14} strokeWidth={2} />
+            {cloneMut.isPending ? 'Clonando...' : 'Clonar'}
           </button>
         </div>
       </div>
@@ -660,6 +1131,12 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
 
           {/* BOM */}
           <FormulaSection itemId={itemId} />
+
+          {/* BOM explosion (lazy, toggleable) */}
+          <ExplosionSection itemId={itemId} itemCode={item.fullCode} />
+
+          {/* Destinos (where-used) */}
+          <DestinosSection itemId={itemId} itemCode={item.fullCode} />
 
         </div>
       </div>
