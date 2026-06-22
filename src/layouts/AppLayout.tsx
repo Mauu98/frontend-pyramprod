@@ -97,12 +97,16 @@ export function AppLayout() {
             className="flex min-h-[64px] items-center gap-3 px-3.5 py-4"
             style={{ background: '#1d293d', borderBottom: '1px solid #1e3a5f' }}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#2C6B2F] text-[17px] font-extrabold text-white shadow-lg shadow-[#1a3d1c]/50">
-              P
-            </div>
+            <svg width="34" height="30" viewBox="0 0 38 34" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+              <rect x="11" y="1"  width="16" height="9" rx="2.5" fill="#2ecc71"/>
+              <rect x="6"  y="12" width="26" height="9" rx="2.5" fill="#27ae60"/>
+              <rect x="1"  y="23" width="36" height="10" rx="2.5" fill="#1a7a40"/>
+            </svg>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-bold uppercase tracking-widest text-white">Piramide</p>
-              <p className="text-[10px] text-slate-500">Enterprise ERP</p>
+              <p className="truncate text-[13px] font-bold uppercase tracking-widest text-white">
+                PYRAM<span style={{ color: '#2ecc71' }}>PROD</span>
+              </p>
+              <p className="text-[10px] text-slate-500">Gestión Industrial</p>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -113,15 +117,20 @@ export function AppLayout() {
           </div>
         ) : (
           <div
-            className="flex min-h-[64px] items-center justify-center py-4"
+            className="flex min-h-[64px] flex-col items-center justify-center gap-2 py-3"
             style={{ background: '#1d293d', borderBottom: '1px solid #1e3a5f' }}
           >
+            <svg width="26" height="23" viewBox="0 0 38 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="11" y="1"  width="16" height="9" rx="2.5" fill="#2ecc71"/>
+              <rect x="6"  y="12" width="26" height="9" rx="2.5" fill="#27ae60"/>
+              <rect x="1"  y="23" width="36" height="10" rx="2.5" fill="#1a7a40"/>
+            </svg>
             <button
               onClick={() => setOpen(true)}
               title="Expandir menú"
-              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-700 text-slate-400 transition hover:border-slate-500 hover:bg-white/10 hover:text-white"
+              className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-700 text-slate-500 transition hover:border-slate-500 hover:bg-white/10 hover:text-white"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={12} />
             </button>
           </div>
         )}

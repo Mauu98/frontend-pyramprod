@@ -79,8 +79,14 @@ export interface ItemDetail {
   stockReserved: number
   stockTotal: number
   stockFuture: number
+  /** @deprecated use shortageSales */
   stockShortage: number
+  shortageSales: number
+  /** @deprecated use shortageStock */
   stockFutureTotal: number
+  shortageStock: number
+  manageShortageSales: boolean
+  manageShortageStock: boolean
   stockMin: number
   stockMax: number
   // warehouse
@@ -105,6 +111,102 @@ export interface ItemDetail {
   invoiceSaleMargin: number | null
   invoiceStockMargin: number | null
   operationComplement: string | null
+}
+
+// ─── Stock module ─────────────────────────────────────────────────────────────
+
+export interface StockLevel {
+  itemId: number
+  itemCode: string
+  itemName: string
+  available: number
+  future: number
+  reservedSales: number
+  shortageSales: number
+  reservedStock: number
+  shortageStock: number
+  max: number
+  min: number
+  manageShortageSales: boolean
+  manageShortageStock: boolean
+}
+
+export type StockVariable =
+  | 'AVAILABLE'
+  | 'FUTURE'
+  | 'RESERVED_SALES'
+  | 'SHORTAGE_SALES'
+  | 'RESERVED_STOCK'
+  | 'SHORTAGE_STOCK'
+  | 'MAX'
+  | 'MIN'
+  | 'MANAGE_SHORTAGE_SALES'
+  | 'MANAGE_SHORTAGE_STOCK'
+
+export type StockMovementType =
+  | 'ENTRY_INVENTORY'
+  | 'ENTRY_MANUFACTURING_ORDER'
+  | 'ENTRY_REMIT_FROM_THIRD'
+  | 'ENTRY_DELIVERY_NOTE_FROM_THIRD'
+  | 'ENTRY_UNPLANNED_STOCK'
+  | 'ENTRY_UNEXPECTED_APPEARANCE'
+  | 'ENTRY_INVENTORY_ERROR'
+  | 'ENTRY_LOANED_STOCK'
+  | 'ENTRY_CONSIGNMENT_STOCK'
+  | 'ENTRY_SAFETY_ADJUSTMENT'
+  | 'EXIT_REMIT_TO_THIRD'
+  | 'EXIT_DELIVERY_NOTE_TO_THIRD'
+  | 'EXIT_SALES_ORDER_BACKUP'
+  | 'EXIT_STOCK_ORDER_BACKUP'
+  | 'EXIT_PLANNED_OT_FAILURE'
+  | 'EXIT_UNEXPECTED_DISAPPEARANCE'
+  | 'EXIT_QUALITY_REJECTION'
+  | 'EXIT_INVENTORY_ERROR'
+  | 'EXIT_LOANED_STOCK'
+  | 'EXIT_CONSIGNMENT_STOCK'
+  | 'EXIT_SAFETY_ADJUSTMENT'
+
+export interface StockMovementRequest {
+  itemId: number
+  entry: boolean
+  stockVariable: StockVariable
+  amount: number
+  movementType: StockMovementType
+  applyRules: boolean
+  relatedDocument?: string
+  memo?: string
+  movementDate: string
+  actorName?: string
+  unitOfMeasure?: string
+}
+
+export interface StockMovementResponse {
+  id: number
+  itemId: number
+  itemCode: string
+  entry: boolean
+  stockVariable: string
+  stockVariableLabel: string
+  amount: number
+  movementType: string
+  movementTypeCode: number
+  relatedDocument: string | null
+  memo: string | null
+  movementDate: string
+  username: string
+  actorName: string | null
+  ruleDescription: string | null
+  unitOfMeasure: string | null
+  appliedRules: boolean
+  createdAt: string
+}
+
+export interface StockPage {
+  content: StockMovementResponse[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
 }
 
 export interface ApiError {
