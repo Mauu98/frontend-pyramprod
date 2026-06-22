@@ -216,3 +216,87 @@ export interface ApiError {
   message: string
   timestamp: string
 }
+
+// ─── Production module ────────────────────────────────────────────────────────
+
+export type ProductionOrderStatus = 'PRE_LAUNCH' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+export type LineType = 'MATERIAL' | 'PRODUCTION'
+export type LineStatus = 'PENDING' | 'RESERVED' | 'IN_PRODUCTION' | 'COMPLETED'
+export type SimulationClassification = 'RESERVE' | 'BUY' | 'FABRICATE'
+
+export interface ProductionOrderRequest {
+  name: string
+  items: Array<{ itemId: number; quantity: number }>
+  launchType?: string
+  notes?: string
+  quoteId?: number
+}
+
+export interface ProductionOrderResponse {
+  id: number
+  orderNumber: number
+  name: string
+  entryDate: string
+  launchDate: string | null
+  launchType: string | null
+  launchedBy: string | null
+  notes: string | null
+  status: ProductionOrderStatus
+  quoteId: number | null
+}
+
+export interface SimulationLine {
+  componentId: number
+  code: string
+  name: string
+  unit: string | null
+  requiredQty: number
+  availableQty: number
+  classification: SimulationClassification
+  depth: number
+}
+
+export interface SimulationResult {
+  orderId: number
+  orderNumber: number
+  lines: SimulationLine[]
+  reserveCount: number
+  buyCount: number
+  fabricateCount: number
+}
+
+export interface ProductionOrderLineResponse {
+  id: number
+  orderId: number
+  lineType: LineType
+  lineStatus: LineStatus
+  operationId: number | null
+  operationCode: string | null
+  operationName: string | null
+  materialId: number | null
+  materialCode: string | null
+  materialName: string | null
+  productId: number | null
+  productCode: string | null
+  productName: string | null
+  requiredQty: number
+  inProcessQty: number
+  finishedQty: number
+  extraQty: number
+  unit1: string | null
+  unit2: string | null
+  unit3: string | null
+  unit4: string | null
+  currentLot: string | null
+  destinationLot: string | null
+  partDescription: string | null
+  launchName: string | null
+}
+
+export interface PageResponse<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
