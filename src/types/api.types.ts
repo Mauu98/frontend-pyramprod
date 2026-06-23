@@ -300,3 +300,112 @@ export interface PageResponse<T> {
   number: number
   size: number
 }
+
+// ─── Purchasing module ────────────────────────────────────────────────────────
+
+export type QuoteStatus = 'ACTIVE' | 'SUPERSEDED'
+
+export interface Supplier {
+  id: number
+  code: string
+  name: string
+  address: string | null
+  city: string | null
+  taxCategory: string | null
+  cuit: string | null
+  phone1: string | null
+  phone2: string | null
+  email: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  createdBy: string | null
+  updatedBy: string | null
+}
+
+export interface SupplierQuote {
+  id: number
+  supplierId: number
+  supplierCode: string
+  supplierName: string
+  itemId: number
+  itemCode: string
+  itemName: string
+  quoteDate: string
+  price: number
+  currency: string
+  exchangeRate: number | null
+  measureId: number | null
+  measureCode: string | null
+  bonus: number | null
+  paymentConditions: string | null
+  quotedQuantity: number
+  status: QuoteStatus
+  createdAt: string | null
+  updatedAt: string | null
+  createdBy: string | null
+  updatedBy: string | null
+}
+
+export interface SupplierItemCode {
+  id: number
+  supplierId: number
+  supplierCode: string
+  supplierName: string | null
+  supplierCompany: string | null
+  itemId: number
+  itemCode: string
+  itemName: string
+  createdAt: string | null
+  updatedAt: string | null
+  createdBy: string | null
+  updatedBy: string | null
+}
+
+export interface PriceComparisonLine {
+  supplierId: number
+  supplierCode: string
+  supplierName: string
+  itemId: number
+  quoteDate: string
+  price: number
+  currency: string
+  exchangeRate: number | null
+  effectivePrice: number
+  bonus: number | null
+  paymentConditions: string | null
+  quotedQuantity: number
+  measureId: number | null
+}
+
+export interface SupplierRequest {
+  code: string
+  name: string
+  address?: string
+  city?: string
+  taxCategory?: string
+  cuit?: string
+  phone1?: string
+  phone2?: string
+  email?: string
+}
+
+export interface SupplierQuoteRequest {
+  supplierId: number
+  itemId: number
+  quoteDate: string
+  price: number
+  currency: string
+  exchangeRate?: number
+  measureId?: number
+  bonus?: number
+  paymentConditions?: string
+  quotedQuantity?: number
+}
+
+export interface SupplierItemCodeRequest {
+  supplierId: number
+  supplierCode: string
+  supplierName?: string
+  supplierCompany?: string
+  itemId: number
+}
