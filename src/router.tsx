@@ -7,6 +7,7 @@ import { MedidasPage } from '@/pages/catalog/MedidasPage'
 import { StockPage } from '@/pages/stock/StockPage'
 import { ProductionPage } from '@/pages/production/ProductionPage'
 import { PurchasingPage } from '@/pages/purchasing/PurchasingPage'
+import { SalesPage } from '@/pages/sales/SalesPage'
 import { useAuthStore } from '@/stores/auth.store'
 
 const rootRoute = createRootRoute()
@@ -67,6 +68,12 @@ const purchasingRoute = createRoute({
   component: PurchasingPage,
 })
 
+const salesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/sales',
+  component: SalesPage,
+})
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -78,7 +85,7 @@ const indexRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
-  appRoute.addChildren([catalogRoute, itemDetailRoute, measuresRoute, stockRoute, productionRoute, purchasingRoute]),
+  appRoute.addChildren([catalogRoute, itemDetailRoute, measuresRoute, stockRoute, productionRoute, purchasingRoute, salesRoute]),
 ])
 
 export const router = createRouter({ routeTree })

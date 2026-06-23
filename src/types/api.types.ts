@@ -409,3 +409,106 @@ export interface SupplierItemCodeRequest {
   supplierCompany?: string
   itemId: number
 }
+
+// ─── Sales module ─────────────────────────────────────────────────────────────
+
+export type TaxRateType = 'IVA' | 'PERCEPTION'
+export type SalesQuoteStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
+
+export interface TaxRate {
+  id: number
+  type: TaxRateType
+  rate: number
+  label: string
+  active: boolean
+  displayOrder: number
+}
+
+export interface Customer {
+  id: number
+  code: string
+  name: string
+  address: string | null
+  cuit: string | null
+  taxCategory: string | null
+  bonus: number | null
+  cashflow: number | null
+  surcharge: number | null
+  priceCoefficient: number | null
+  paymentDaysCashflow: number | null
+  paymentDaysNoCashflow: number | null
+  phone1: string | null
+  phone2: string | null
+  email: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  createdBy: string | null
+  updatedBy: string | null
+}
+
+export interface CustomerRequest {
+  code: string
+  name: string
+  address?: string
+  cuit?: string
+  taxCategory?: string
+  bonus?: number
+  cashflow?: number
+  surcharge?: number
+  priceCoefficient?: number
+  paymentDaysCashflow?: number
+  paymentDaysNoCashflow?: number
+  phone1?: string
+  phone2?: string
+  email?: string
+}
+
+export interface SalesQuoteLineRequest {
+  itemId: number
+  quantity: number
+  unitPrice: number
+  measureId?: number
+  exchangeRate?: number
+}
+
+export interface SalesQuoteRequest {
+  customerId: number
+  quoteDate: string
+  validityDays?: number
+  currency: string
+  ivaRate: number
+  perceptionRate?: number
+  comments?: string
+  lines: SalesQuoteLineRequest[]
+}
+
+export interface SalesQuoteLine {
+  itemId: number
+  itemCode: string
+  itemName: string
+  quantity: number
+  unitPrice: number
+  measureId: number | null
+  measureName: string | null
+  exchangeRate: number
+  lineTotal: number
+}
+
+export interface SalesQuote {
+  id: number
+  quoteNumber: number
+  customerId: number
+  customerName: string
+  quoteDate: string
+  validityDays: number | null
+  currency: string
+  ivaRate: number
+  perceptionRate: number | null
+  comments: string | null
+  status: SalesQuoteStatus
+  lines: SalesQuoteLine[]
+  subtotal: number
+  ivaAmount: number
+  perceptionAmount: number
+  total: number
+}
