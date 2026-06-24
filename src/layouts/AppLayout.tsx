@@ -17,7 +17,7 @@ const navGroups: NavGroup[] = [
     { icon: Ruler,  label: 'Medidas',      path: '/app/measures', color: '#34d399' },
   ]},
   { label: 'Operaciones', items: [
-    { icon: ShoppingCart, label: 'Compras',      path: '/app/purchases',  color: '#a78bfa' },
+    { icon: ShoppingCart, label: 'Compras',      path: '/app/purchasing',  color: '#a78bfa' },
     { icon: TrendingUp,   label: 'Ventas',       path: '/app/sales',      color: '#34d399' },
     { icon: Cog,          label: 'Produccion',   path: '/app/production', color: '#fbbf24' },
   ]},

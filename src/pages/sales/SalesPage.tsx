@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ShoppingBag, Search, Plus, X, FileText } from 'lucide-react'
+import { ShoppingBag, Search, Plus, X, FileText, Package } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type {
@@ -11,6 +11,8 @@ import type {
   SalesQuoteLineRequest,
   TaxRate,
   PageResponse,
+  SalesOrderResponse,
+  SalesOrderStatus,
 } from '@/types/api.types'
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -741,10 +743,324 @@ function CustomerList({
   )
 }
 
+// ─── Sales Orders Status ──────────────────────────────────────────────────────
+
+const ORDER_STATUS_LABEL: Record<SalesOrderStatus, string> = {
+  PENDING_STOCK: 'Sin stock',
+  PARTIALLY_RESERVED: 'Parcial',
+  FULLY_RESERVED: 'Reservado',
+  CANCELLED: 'Cancelada',
+}
+
+const ORDER_STATUS_CLASS: Record<SalesOrderStatus, string> = {
+  PENDING_STOCK: 'bg-red-50 text-red-500',
+  PARTIALLY_RESERVED: 'bg-amber-50 text-amber-600',
+  FULLY_RESERVED: 'bg-emerald-50 text-emerald-600',
+  CANCELLED: 'bg-slate-100 text-slate-500',
+}
+
+// ─── New Sales Order Dialog ───────────────────────────────────────────────────
+
+function NewSalesOrderDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [customerId, setCustomerId] = useState('')
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10))
+  const [currency, setCurrency] = useState('ARS')
+  const [ivaRate, setIvaRate] = useState('21')
+  const [lines, setLines] = useState([{ itemId: '', quantityOrdered: '1', unitPrice: '' }])
+  const [error, setError] = useState<string | null>(null)
+  const qc = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: () => apiClient.post<SalesOrderResponse>('/sales/orders', {
+      customerId: Number(customerId),
+      orderDate,
+      currency,
+      ivaRate: Number(ivaRate),
+      lines: lines.map(l => ({
+        itemId: Number(l.itemId),
+        quantityOrdered: Number(l.quantityOrdered) || 1,
+        unitPrice: Number(l.unitPrice),
+      })),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      setCustomerId(''); setOrderDate(new Date().toISOString().slice(0, 10)); setCurrency('ARS'); setIvaRate('21')
+      setLines([{ itemId: '', quantityOrdered: '1', unitPrice: '' }]); setError(null); onCreated(); onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setError(msg ?? 'No se pudo crear la nota de venta.')
+    },
+  })
+
+  function addLine() { setLines(prev => [...prev, { itemId: '', quantityOrdered: '1', unitPrice: '' }]) }
+  function removeLine(i: number) { setLines(prev => prev.filter((_, idx) => idx !== i)) }
+  function updateLine(i: number, field: string, val: string) { setLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l)) }
+
+  function handleSubmit() {
+    setError(null)
+    if (!customerId) { setError('El ID de cliente es requerido.'); return }
+    for (const l of lines) {
+      if (!l.itemId || !l.unitPrice) { setError('Completá todos los ítems.'); return }
+    }
+    mutation.mutate()
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="relative w-[560px] max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
+          <div>
+            <p className="text-[14px] font-semibold text-[#111827]">Nueva Nota de Venta</p>
+            <p className="text-[12px] text-slate-400">Completá los datos del pedido</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-1.5 text-slate-400 hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        <div className="flex flex-col gap-4 px-6 py-5">
+          <div className="flex gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">ID Cliente *</label>
+              <input type="number" value={customerId} onChange={e => setCustomerId(e.target.value)} placeholder="ID del cliente"
+                className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Moneda</label>
+              <select value={currency} onChange={e => setCurrency(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-3 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white">
+                <option>ARS</option><option>USD</option><option>EUR</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Fecha</label>
+              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">IVA %</label>
+              <select value={ivaRate} onChange={e => setIvaRate(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-3 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white">
+                <option value="21">21%</option>
+                <option value="10.5">10.5%</option>
+                <option value="27">27%</option>
+                <option value="0">0%</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Líneas</label>
+              <button type="button" onClick={addLine} className="flex items-center gap-1 text-[12px] font-semibold text-[#fbbf24] hover:text-[#f59e0b]">
+                <Plus size={12} /> Agregar línea
+              </button>
+            </div>
+            {lines.map((l, i) => (
+              <div key={i} className="flex gap-2 rounded-xl border border-gray-100 bg-[#f7f8fa] p-3">
+                <div className="flex flex-1 flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">ID Artículo</label>
+                  <input type="number" value={l.itemId} onChange={e => updateLine(i, 'itemId', e.target.value)} placeholder="ID"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-[#fbbf24]" />
+                </div>
+                <div className="flex flex-col gap-1" style={{ width: 72 }}>
+                  <label className="text-[11px] text-slate-400">Cant.</label>
+                  <input type="number" step="0.001" value={l.quantityOrdered} onChange={e => updateLine(i, 'quantityOrdered', e.target.value)}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-[#fbbf24]" />
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">Precio Unit.</label>
+                  <input type="number" step="0.0001" value={l.unitPrice} onChange={e => updateLine(i, 'unitPrice', e.target.value)} placeholder="0.00"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-[#fbbf24]" />
+                </div>
+                {lines.length > 1 && (
+                  <button type="button" onClick={() => removeLine(i)} className="mt-auto rounded-lg p-2 text-slate-300 hover:bg-red-50 hover:text-red-400">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-600">{error}</div>}
+        </div>
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-gray-100 bg-white px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-500">Cancelar</button>
+          <button type="button" onClick={handleSubmit} disabled={mutation.isPending}
+            className="flex items-center gap-2 rounded-xl bg-[#fbbf24] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#f59e0b] disabled:opacity-50">
+            {mutation.isPending ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Creando...</> : 'Crear NV'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Sales Orders Tab ─────────────────────────────────────────────────────────
+
+function SalesOrdersTab() {
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [showNewDialog, setShowNewDialog] = useState(false)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const qc = useQueryClient()
+
+  const { data, isLoading } = useQuery<{ content: SalesOrderResponse[] }>({
+    queryKey: ['sales-orders', statusFilter],
+    queryFn: () =>
+      apiClient.get('/sales/orders', {
+        params: { status: statusFilter === 'ALL' ? undefined : statusFilter, size: 50 },
+      }).then(r => r.data),
+  })
+
+  const orders = data?.content ?? []
+
+  const reserveMutation = useMutation({
+    mutationFn: (id: number) => apiClient.patch(`/sales/orders/${id}/reserve`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales-orders'] }),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => apiClient.patch(`/sales/orders/${id}/cancel`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales-orders'] }),
+  })
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Estado</label>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-3 py-2 text-[13px] outline-none focus:border-[#fbbf24] focus:bg-white">
+            <option value="ALL">Todos</option>
+            <option value="PENDING_STOCK">Sin stock</option>
+            <option value="PARTIALLY_RESERVED">Parcial</option>
+            <option value="FULLY_RESERVED">Reservado</option>
+            <option value="CANCELLED">Cancelada</option>
+          </select>
+        </div>
+        <button onClick={() => setShowNewDialog(true)}
+          className="flex items-center gap-2 rounded-xl bg-[#fbbf24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#f59e0b]">
+          <Plus size={13} /> Nueva NV
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex h-32 items-center justify-center"><Spinner /></div>
+      ) : orders.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-10 text-slate-300">
+          <Package size={28} strokeWidth={1.2} />
+          <p className="text-[13px]">Sin notas de venta</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-gray-100 bg-[#f7f8fa]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">N° NV</th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Cliente</th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Fecha</th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado</th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Total</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map(o => (
+                <>
+                  <tr key={o.id} onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
+                    className="cursor-pointer border-b border-gray-50 hover:bg-[#fafafa]">
+                    <td className="px-4 py-3 font-mono text-[12px] font-bold text-[#d97706]">#{o.orderNumber}</td>
+                    <td className="px-3 py-3 text-slate-700">{o.customerName}</td>
+                    <td className="px-3 py-3 text-slate-600">{o.orderDate}</td>
+                    <td className="px-3 py-3">
+                      <span className={cn('rounded-full px-2.5 py-0.5 text-[11px] font-bold', ORDER_STATUS_CLASS[o.status])}>
+                        {ORDER_STATUS_LABEL[o.status]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono font-semibold text-[#374151]">
+                      {o.currency} {Number(o.total).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                        {o.status !== 'CANCELLED' && (
+                          <button onClick={() => reserveMutation.mutate(o.id)}
+                            className="rounded-lg bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-100">
+                            Reservar
+                          </button>
+                        )}
+                        {o.status !== 'CANCELLED' && (
+                          <button onClick={() => cancelMutation.mutate(o.id)}
+                            className="rounded-lg bg-red-50 px-3 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-100">
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedId === o.id && o.lines.length > 0 && (
+                    <tr key={`${o.id}-lines`} className="border-b border-gray-50 bg-[#fafafa]">
+                      <td colSpan={6} className="px-6 pb-4 pt-2">
+                        <div className="overflow-hidden rounded-xl border border-gray-100">
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="border-b border-gray-100 bg-white">
+                                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Artículo</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Pedido</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Reservado</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Pendiente</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Precio</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {o.lines.map(l => (
+                                <tr key={l.id} className="border-b border-gray-50">
+                                  <td className="px-3 py-2">
+                                    <span className="font-mono text-[11px] text-slate-400">{l.itemCode}</span>
+                                    <span className="ml-2 text-slate-700">{l.itemName}</span>
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-600">{l.quantityOrdered}</td>
+                                  <td className="px-3 py-2 text-right text-emerald-600">{l.quantityReserved}</td>
+                                  <td className="px-3 py-2 text-right text-amber-600">{l.quantityPending}</td>
+                                  <td className="px-3 py-2 text-right font-mono text-slate-600">{Number(l.unitPrice).toFixed(4)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="mt-3 flex justify-end gap-6 text-[12px]">
+                          <span className="text-slate-400">Subtotal: <span className="font-mono text-slate-600">{Number(o.subtotal).toFixed(2)}</span></span>
+                          <span className="text-slate-400">IVA: <span className="font-mono text-slate-600">{Number(o.ivaAmount).toFixed(2)}</span></span>
+                          <span className="font-semibold text-slate-700">Total: <span className="font-mono">{o.currency} {Number(o.total).toFixed(2)}</span></span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <NewSalesOrderDialog open={showNewDialog} onClose={() => setShowNewDialog(false)} onCreated={() => {}} />
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
+type TopTab = 'clientes' | 'notas-venta'
+
+const TOP_TAB_LABELS: Record<TopTab, string> = {
+  clientes: 'Clientes',
+  'notas-venta': 'Notas de Venta',
+}
 
 export function SalesPage() {
   const [selected, setSelected] = useState<Customer | null>(null)
+  const [topTab, setTopTab] = useState<TopTab>('clientes')
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#f7f8fa]">
@@ -752,7 +1068,13 @@ export function SalesPage() {
         <span className="absolute inset-x-0 top-0 h-[3px] bg-[#fbbf24]" />
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
           <span className="text-sm text-slate-400">Ventas</span>
-          {selected && (
+          {topTab !== 'clientes' && (
+            <>
+              <span className="text-slate-300">/</span>
+              <span className="text-sm font-semibold text-[#d97706]">{TOP_TAB_LABELS[topTab]}</span>
+            </>
+          )}
+          {topTab === 'clientes' && selected && (
             <>
               <span className="text-slate-300">/</span>
               <span className="text-sm font-semibold text-[#d97706]">{selected.code}</span>
@@ -767,19 +1089,42 @@ export function SalesPage() {
         </div>
         <div>
           <h1 className="text-[22px] font-bold tracking-tight text-[#111827]">Ventas</h1>
-          <p className="mt-0.5 text-[13px] text-slate-400">Clientes y presupuestos con IVA y percepciones</p>
+          <p className="mt-0.5 text-[13px] text-slate-400">Clientes, presupuestos y notas de venta</p>
         </div>
       </div>
 
-      <div className="mx-6 mb-6 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <CustomerList selected={selected} onSelect={setSelected} />
-
-        {selected ? (
-          <DetailPanel customer={selected} />
-        ) : (
-          <EmptyPanel />
-        )}
+      {/* Top-level tab bar */}
+      <div className="mx-6 mb-2 flex gap-1 border-b border-gray-200">
+        {(['clientes', 'notas-venta'] as TopTab[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setTopTab(t)}
+            className={cn(
+              'flex items-center gap-2 px-4 pb-3 pt-1 text-[13px] font-semibold transition',
+              topTab === t
+                ? 'border-b-2 border-[#fbbf24] text-[#d97706]'
+                : 'text-slate-400 hover:text-slate-600',
+            )}
+          >
+            {t === 'clientes' && <ShoppingBag size={13} />}
+            {t === 'notas-venta' && <Package size={13} />}
+            {TOP_TAB_LABELS[t]}
+          </button>
+        ))}
       </div>
+
+      {topTab === 'clientes' && (
+        <div className="mx-6 mb-6 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <CustomerList selected={selected} onSelect={setSelected} />
+          {selected ? <DetailPanel customer={selected} /> : <EmptyPanel />}
+        </div>
+      )}
+
+      {topTab === 'notas-venta' && (
+        <div className="mx-6 mb-6 min-h-0 flex-1 overflow-y-auto rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <SalesOrdersTab />
+        </div>
+      )}
     </div>
   )
 }

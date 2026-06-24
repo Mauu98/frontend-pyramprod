@@ -512,3 +512,186 @@ export interface SalesQuote {
   perceptionAmount: number
   total: number
 }
+
+// ─── Purchasing Phase 2 ───────────────────────────────────────────────────────
+
+export type PurchaseOrderStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'RECEIVED' | 'CANCELLED'
+export type DeliveryNoteStatus = 'OPEN' | 'CLOSED'
+export type InvoiceType = 'INVOICE' | 'CREDIT_NOTE' | 'DEBIT_NOTE'
+
+export interface PurchaseOrderLineRequest {
+  itemId: number
+  supplierQuoteId?: number
+  orderedQuantity: number
+  unitPrice: number
+  currency: string
+  measure?: string
+}
+
+export interface PurchaseOrderRequest {
+  supplierId: number
+  orderDate: string
+  expectedDeliveryDate?: string
+  currency?: string
+  statusNotes?: string
+  lines: PurchaseOrderLineRequest[]
+}
+
+export interface PurchaseOrderLineResponse {
+  id: number
+  itemId: number
+  itemCode: string
+  itemName: string
+  supplierQuoteId: number | null
+  orderedQuantity: number
+  unitPrice: number
+  currency: string
+  measure: string | null
+}
+
+export interface PurchaseOrderResponse {
+  id: number
+  orderNumber: number
+  supplierId: number
+  supplierCode: string
+  supplierName: string
+  orderDate: string
+  expectedDeliveryDate: string | null
+  status: PurchaseOrderStatus
+  statusNotes: string | null
+  currency: string | null
+  lines: PurchaseOrderLineResponse[]
+  createdAt: string | null
+  createdBy: string | null
+}
+
+export interface DeliveryNoteLineRequest {
+  itemId: number
+  statedQuantity: number
+  verifiedQuantity: number
+}
+
+export interface DeliveryNoteRequest {
+  noteNumber: string
+  noteDate: string
+  supplierId: number
+  purchaseOrderId?: number
+}
+
+export interface DeliveryNoteLineResponse {
+  id: number
+  itemId: number
+  itemCode: string
+  itemName: string
+  statedQuantity: number
+  verifiedQuantity: number
+  stockMovementId: number | null
+}
+
+export interface DeliveryNoteResponse {
+  id: number
+  noteNumber: string
+  noteDate: string
+  supplierId: number
+  supplierCode: string
+  supplierName: string
+  purchaseOrderId: number | null
+  status: DeliveryNoteStatus
+  lines: DeliveryNoteLineResponse[]
+  createdAt: string | null
+  createdBy: string | null
+}
+
+export interface InvoiceLineRequest {
+  itemId: number
+  quantity: number
+  unitPrice: number
+  vatRate: number
+}
+
+export interface InvoiceRequest {
+  supplierId: number
+  invoiceDate: string
+  invoiceType: InvoiceType
+  vatAmount21?: number
+  vatAmount10?: number
+  vatAmount27?: number
+  perceptions?: number
+  withholdings?: number
+  internalTaxes?: number
+}
+
+export interface InvoiceLineResponse {
+  id: number
+  itemId: number
+  itemCode: string
+  itemName: string
+  quantity: number
+  unitPrice: number
+  vatRate: number
+  vatAmount: number
+  lineTotal: number
+}
+
+export interface SupplierInvoiceResponse {
+  id: number
+  supplierId: number
+  supplierCode: string
+  supplierName: string
+  invoiceDate: string
+  invoiceType: InvoiceType
+  vatAmount21: number
+  vatAmount10: number
+  vatAmount27: number
+  perceptions: number
+  withholdings: number
+  internalTaxes: number
+  posted: boolean
+  lines: InvoiceLineResponse[]
+  createdAt: string | null
+  createdBy: string | null
+}
+
+// ─── Sales Phase 2 ────────────────────────────────────────────────────────────
+
+export type SalesOrderStatus = 'PENDING_STOCK' | 'PARTIALLY_RESERVED' | 'FULLY_RESERVED' | 'CANCELLED'
+
+export interface SalesOrderLineResponse {
+  id: number
+  itemId: number
+  itemCode: string
+  itemName: string
+  quantityOrdered: number
+  quantityReserved: number
+  quantityPending: number
+  unitPrice: number
+  exchangeRate: number
+  lineTotal: number
+}
+
+export interface SalesOrderResponse {
+  id: number
+  orderNumber: number
+  customerId: number
+  customerName: string
+  orderDate: string
+  currency: string
+  ivaRate: number
+  status: SalesOrderStatus
+  invoiceStatus: string
+  lines: SalesOrderLineResponse[]
+  subtotal: number
+  ivaAmount: number
+  total: number
+  createdAt: string | null
+  createdBy: string | null
+}
+
+export interface ReservationStatusResponse {
+  orderId: number
+  orderNumber: number
+  totalLines: number
+  fullyReservedLines: number
+  coveragePercent: number
+  lines: SalesOrderLineResponse[]
+}

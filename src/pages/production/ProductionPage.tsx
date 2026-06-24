@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Cog, Search, Plus, X, ChevronDown } from 'lucide-react'
+import { Cog, Search, Plus, X, ChevronDown, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { apiClient } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type {
@@ -12,6 +13,15 @@ import type {
   ProductionOrderStatus,
   PageResponse,
 } from '@/types/api.types'
+
+interface LineAdvanceRequest {
+  inProcessQty?: number
+  finishedQty?: number
+  extraQty?: number
+  currentLot?: string
+  destinationLot?: string
+  launchName?: string
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -329,13 +339,179 @@ function SimulacionTab({ order }: { order: ProductionOrderResponse }) {
   )
 }
 
+// ─── Advance line dialog ──────────────────────────────────────────────────────
+
+function AdvanceLineDialog({ open, line, orderId, onClose, onSuccess }: {
+  open: boolean
+  line: ProductionOrderLineResponse
+  orderId: number
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [finishedQty, setFinishedQty] = useState('')
+  const [inProcessQty, setInProcessQty] = useState('')
+  const [currentLot, setCurrentLot] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: (req: LineAdvanceRequest) =>
+      apiClient.patch<ProductionOrderLineResponse>(
+        `/production/orders/${orderId}/lines/${line.id}/advance`,
+        req,
+      ),
+    onSuccess: () => {
+      setFinishedQty('')
+      setInProcessQty('')
+      setCurrentLot('')
+      setError(null)
+      onSuccess()
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setError(msg ?? 'No se pudo avanzar la línea.')
+    },
+  })
+
+  function handleSubmit() {
+    setError(null)
+    const req: LineAdvanceRequest = {}
+    if (finishedQty) req.finishedQty = Number(finishedQty)
+    if (inProcessQty) req.inProcessQty = Number(inProcessQty)
+    if (currentLot.trim()) req.currentLot = currentLot.trim()
+    if (Object.keys(req).length === 0) {
+      setError('Ingresá al menos un valor para avanzar.')
+      return
+    }
+    mutation.mutate(req)
+  }
+
+  if (!open) return null
+
+  const itemName = line.materialName ?? line.productName ?? '—'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="relative w-[420px] rounded-2xl border border-gray-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div>
+            <p className="text-[14px] font-semibold text-[#111827]">Avanzar Línea</p>
+            <p className="text-[12px] text-slate-400 truncate max-w-[300px]">{itemName}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-1.5 text-slate-400 transition hover:bg-gray-100 hover:text-slate-600">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 px-6 py-5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Cant. Terminada</label>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              value={finishedQty}
+              onChange={e => setFinishedQty(e.target.value)}
+              placeholder={`Requerido: ${line.requiredQty.toFixed(3)}`}
+              className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-2.5 text-[14px] text-[#374151] placeholder-slate-300 outline-none transition focus:border-[#fbbf24] focus:bg-white"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Cant. En Proceso</label>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              value={inProcessQty}
+              onChange={e => setInProcessQty(e.target.value)}
+              className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-2.5 text-[14px] text-[#374151] placeholder-slate-300 outline-none transition focus:border-[#fbbf24] focus:bg-white"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Lote Actual</label>
+            <input
+              type="text"
+              value={currentLot}
+              onChange={e => setCurrentLot(e.target.value)}
+              className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-2.5 text-[14px] text-[#374151] placeholder-slate-300 outline-none transition focus:border-[#fbbf24] focus:bg-white"
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-600">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-500 transition hover:border-gray-300"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={mutation.isPending}
+            className="flex items-center gap-2 rounded-xl bg-[#fbbf24] px-5 py-2 text-[13px] font-semibold text-white transition hover:bg-[#f59e0b] disabled:opacity-50"
+          >
+            {mutation.isPending ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Guardando...</> : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Lines tab ────────────────────────────────────────────────────────────────
 
-function LineasTab({ orderId }: { orderId: number }) {
+const LINE_STATUS_LABELS: Record<string, string> = {
+  PENDING:      'Pendiente',
+  RESERVED:     'Reservado',
+  IN_PRODUCTION:'En Proceso',
+  COMPLETED:    'Completado',
+}
+
+function LineasTab({ order }: { order: ProductionOrderResponse }) {
+  const orderId = order.id
+  const qc = useQueryClient()
+  const [advancingLine, setAdvancingLine] = useState<ProductionOrderLineResponse | null>(null)
+
   const { data: lines = [], isLoading } = useQuery<ProductionOrderLineResponse[]>({
     queryKey: ['production-lines', orderId],
     queryFn: () => apiClient.get<ProductionOrderLineResponse[]>(`/production/orders/${orderId}/lines`).then(r => r.data),
   })
+
+  function handleAdvanceSuccess() {
+    qc.invalidateQueries({ queryKey: ['production-lines', orderId] })
+    qc.invalidateQueries({ queryKey: ['production-orders'] })
+  }
+
+  function exportXls() {
+    const rows = lines.map(line => ({
+      'Tipo':          line.lineType === 'MATERIAL' ? 'Material' : 'Producción',
+      'Estado':        LINE_STATUS_LABELS[line.lineStatus] ?? line.lineStatus,
+      'Descripción':   line.partDescription ?? '',
+      'Código Material': line.materialCode ?? line.productCode ?? '',
+      'Nombre Material': line.materialName ?? line.productName ?? '',
+      'Cant. Requerida': line.requiredQty,
+      'Cant. En Proceso': line.inProcessQty,
+      'Cant. Terminada':  line.finishedQty,
+      'Cant. Extra':      line.extraQty,
+      'Lote Actual':      line.currentLot ?? '',
+      'Lote Destino':     line.destinationLot ?? '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Líneas')
+    XLSX.writeFile(wb, `produccion-orden-${order.orderNumber}.xlsx`)
+  }
 
   if (isLoading) return <div className="flex h-24 items-center justify-center"><Spinner /></div>
 
@@ -349,59 +525,94 @@ function LineasTab({ orderId }: { orderId: number }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-100">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b border-gray-100 bg-[#f7f8fa]">
-            <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Tipo</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Material / Producto</th>
-            <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Requerido</th>
-            <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">En Proceso</th>
-            <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Terminado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map(line => {
-            const itemCode = line.materialCode ?? line.productCode ?? '—'
-            const itemName = line.materialName ?? line.productName ?? '—'
-            return (
-              <tr key={line.id} className="border-b border-gray-50 hover:bg-[#fafafa]">
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    'rounded-full px-2.5 py-0.5 text-[11px] font-bold',
-                    line.lineType === 'MATERIAL' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700',
-                  )}>
-                    {line.lineType === 'MATERIAL' ? 'Material' : 'Producción'}
-                  </span>
-                </td>
-                <td className="px-3 py-3">
-                  <span className={cn(
-                    'rounded-full px-2.5 py-0.5 text-[11px] font-bold',
-                    line.lineStatus === 'RESERVED' ? 'bg-emerald-100 text-emerald-700'
-                    : line.lineStatus === 'PENDING' ? 'bg-amber-100 text-amber-700'
-                    : line.lineStatus === 'IN_PRODUCTION' ? 'bg-indigo-100 text-indigo-700'
-                    : 'bg-slate-100 text-slate-500',
-                  )}>
-                    {line.lineStatus === 'RESERVED' ? 'Reservado'
-                    : line.lineStatus === 'PENDING' ? 'Pendiente'
-                    : line.lineStatus === 'IN_PRODUCTION' ? 'En Proceso'
-                    : 'Completado'}
-                  </span>
-                </td>
-                <td className="px-3 py-3">
-                  <span className="font-mono text-[12px] text-slate-500">{itemCode}</span>
-                  <span className="ml-2 text-slate-700">{itemName}</span>
-                </td>
-                <td className="px-3 py-3 text-right font-mono font-semibold text-[#374151]">{line.requiredQty.toFixed(3)}</td>
-                <td className="px-3 py-3 text-right font-mono text-slate-500">{line.inProcessQty.toFixed(3)}</td>
-                <td className="px-4 py-3 text-right font-mono text-slate-500">{line.finishedQty.toFixed(3)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="mb-3 flex justify-end">
+        <button
+          onClick={exportXls}
+          className="flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-600 transition hover:border-gray-300 hover:bg-[#f7f8fa]"
+        >
+          <Download size={13} />
+          Exportar XLS
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-gray-100">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-gray-100 bg-[#f7f8fa]">
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Tipo</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Material / Producto</th>
+              <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Requerido</th>
+              <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">En Proceso</th>
+              <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Terminado</th>
+              {order.status === 'ACTIVE' && (
+                <th className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400" />
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map(line => {
+              const itemCode = line.materialCode ?? line.productCode ?? '—'
+              const itemName = line.materialName ?? line.productName ?? '—'
+              const canAdvance = order.status === 'ACTIVE' && line.lineStatus !== 'COMPLETED'
+              return (
+                <tr key={line.id} className="border-b border-gray-50 hover:bg-[#fafafa]">
+                  <td className="px-4 py-3">
+                    <span className={cn(
+                      'rounded-full px-2.5 py-0.5 text-[11px] font-bold',
+                      line.lineType === 'MATERIAL' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700',
+                    )}>
+                      {line.lineType === 'MATERIAL' ? 'Material' : 'Producción'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className={cn(
+                      'rounded-full px-2.5 py-0.5 text-[11px] font-bold',
+                      line.lineStatus === 'RESERVED' ? 'bg-emerald-100 text-emerald-700'
+                      : line.lineStatus === 'PENDING' ? 'bg-amber-100 text-amber-700'
+                      : line.lineStatus === 'IN_PRODUCTION' ? 'bg-indigo-100 text-indigo-700'
+                      : 'bg-slate-100 text-slate-500',
+                    )}>
+                      {LINE_STATUS_LABELS[line.lineStatus] ?? line.lineStatus}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="font-mono text-[12px] text-slate-500">{itemCode}</span>
+                    <span className="ml-2 text-slate-700">{itemName}</span>
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono font-semibold text-[#374151]">{line.requiredQty.toFixed(3)}</td>
+                  <td className="px-3 py-3 text-right font-mono text-slate-500">{line.inProcessQty.toFixed(3)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-slate-500">{line.finishedQty.toFixed(3)}</td>
+                  {order.status === 'ACTIVE' && (
+                    <td className="px-3 py-3 text-right">
+                      {canAdvance && (
+                        <button
+                          onClick={() => setAdvancingLine(line)}
+                          className="rounded-lg border border-[#fbbf24] px-3 py-1 text-[12px] font-semibold text-[#d97706] transition hover:bg-[#fbbf24]/10"
+                        >
+                          Avanzar
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {advancingLine && (
+        <AdvanceLineDialog
+          open
+          line={advancingLine}
+          orderId={orderId}
+          onClose={() => setAdvancingLine(null)}
+          onSuccess={handleAdvanceSuccess}
+        />
+      )}
+    </>
   )
 }
 
@@ -452,7 +663,7 @@ function DetailPanel({ order }: { order: ProductionOrderResponse }) {
         {tab === 'simulacion' ? (
           <SimulacionTab order={order} />
         ) : (
-          <LineasTab orderId={order.id} />
+          <LineasTab order={order} />
         )}
       </div>
     </div>
