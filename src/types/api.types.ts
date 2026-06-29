@@ -113,6 +113,7 @@ export interface ItemDetail {
   invoiceSaleMargin: number | null
   invoiceStockMargin: number | null
   operationComplement: string | null
+  functionName: string | null
 }
 
 // ─── Stock module ─────────────────────────────────────────────────────────────
