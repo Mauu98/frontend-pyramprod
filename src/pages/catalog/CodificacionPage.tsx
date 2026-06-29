@@ -808,25 +808,96 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
         </FormField>
       </FormSection>
 
-      <FormSection title="Método de peso calculado">
-        <FormField label="Método" optional>
-          <select {...register('weightMethod')} className={inputBase}>
-            <option value="">Sin método (peso manual)</option>
-            {WEIGHT_METHODS.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </FormField>
-        {weightMethod && (
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Peso específico (kg/m³ o similar)" optional>
-              <input type="number" step="0.0001" {...register('specificWeight')} className={inputBase} placeholder="7850.0000" />
-            </FormField>
-            <FormField label="Dimensión nominal" optional>
-              <input type="number" step="0.001" {...register('nominalDimension')} className={inputBase} placeholder="0.000" />
-            </FormField>
-          </div>
-        )}
+      <FormSection title="Datos para pesos calculados">
+        {/* Método 1 — Kg./M3. (volumétrico por peso específico) */}
+        <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={['Mm.', 'Mm2.', 'Mm3.'].includes(weightMethod)}
+              onChange={e => setValue('weightMethod', e.target.checked ? 'Mm.' : '')}
+              className="h-4 w-4 accent-[#2C3E50]"
+            />
+            <span className="text-[13px] font-semibold text-[#1A1A1A]">
+              Método 1 [Kg./M3.]:
+            </span>
+            <span className="text-[12px] text-[#667085]">
+              Se conoce el peso específico del material de esta clase
+            </span>
+          </label>
+
+          {['Mm.', 'Mm2.', 'Mm3.'].includes(weightMethod) && (
+            <div className="mt-4 flex flex-col gap-4 pl-6">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Valor peso específico (Kg./M3.)" optional>
+                  <input type="number" step="0.00000001" {...register('specificWeight')}
+                    className={inputBase} placeholder="0,00000000" />
+                </FormField>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[12px] font-medium text-[#344054]">Dimensión específica del material:</p>
+                <div className="flex flex-col gap-2">
+                  {([
+                    ['Mm.', 'Para materiales que permitirán trozado y formen piezas que tendrán mismo espesor (Superficie Variable)'],
+                    ['Mm2.', 'Para materiales que permitirán trozado y formen piezas que tendrán misma sección (Longitud Variable)'],
+                    ['Mm3.', 'Para materiales que NO permitirán trozado y formen piezas que tendrán volumen fijo'],
+                  ] as const).map(([val, desc]) => (
+                    <label key={val} className="flex cursor-pointer items-start gap-2.5">
+                      <input
+                        type="radio"
+                        name="weightMethodSub"
+                        checked={weightMethod === val}
+                        onChange={() => setValue('weightMethod', val)}
+                        className="mt-0.5 h-4 w-4 accent-[#2C3E50]"
+                      />
+                      <span className="text-[12px] text-[#344054]">
+                        <strong>{val}</strong>: {desc}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <FormField label="Valor fijo expresado en el sistema de unidades del método seleccionado" optional>
+                <input type="number" step="0.00000001" {...register('nominalDimension')}
+                  className={inputBase} placeholder="0,00000000" />
+              </FormField>
+            </div>
+          )}
+        </div>
+
+        {/* Método 2 — Kg./Item */}
+        <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={weightMethod === 'Kg./Und'}
+              onChange={e => setValue('weightMethod', e.target.checked ? 'Kg./Und' : '')}
+              className="h-4 w-4 accent-[#2C3E50]"
+            />
+            <span className="text-[13px] font-semibold text-[#1A1A1A]">Método 2 [Kg./Item]:</span>
+            <span className="text-[12px] text-[#667085]">
+              Las piezas de este material tendrán peso unitario conocido
+            </span>
+          </label>
+        </div>
+
+        {/* Método 3 — Items/Kg. */}
+        <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={weightMethod === 'Und/Kg.'}
+              onChange={e => setValue('weightMethod', e.target.checked ? 'Und/Kg.' : '')}
+              className="h-4 w-4 accent-[#2C3E50]"
+            />
+            <span className="text-[13px] font-semibold text-[#1A1A1A]">Método 3 [Items/Kg.]:</span>
+            <span className="text-[12px] text-[#667085]">
+              Las piezas de este material tendrán cantidad conocida por Kg.
+            </span>
+          </label>
+        </div>
       </FormSection>
 
       <FormSection title="Materia prima por defecto">
