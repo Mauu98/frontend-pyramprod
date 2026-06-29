@@ -74,6 +74,9 @@ function MaterialPicker({ value, onChange }: { value: string; onChange: (code: s
   )
 }
 
+// Segments that work with raw materials — from Python: digi_und = [4,5,7,8,9] (no material)
+const SEGMENTS_WITHOUT_MATERIAL = new Set(['4', '5', '7', '8', '9'])
+
 // ─── Main modal ───────────────────────────────────────────────────────────────
 export function NewItemForm({ open, itemType, onSave, onClose }: {
   open: boolean; itemType: ItemClass; onSave: (item: ItemDetail) => void; onClose: () => void
@@ -85,6 +88,8 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
   const watched = useWatch({ control })
   const [matName, setMatName] = useState(itemType.materialName ?? '')
   const [matCode, setMatCode] = useState(itemType.material ?? '')
+
+  const requiresMaterial = !SEGMENTS_WITHOUT_MATERIAL.has(itemType.segmentCode)
 
   const d1 = parseFloat(watched.d1 || '0') || 0
   const d2 = parseFloat(watched.d2 || '0') || 0
@@ -114,11 +119,12 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
   }
 
   const onSubmit = (v: FormValues) => {
+    if (requiresMaterial && !matCode) return
     m.mutate({
       typeId:              itemType.id,
       fullName:            previewName || v.func,
       functionName:        v.func || null,
-      material:            matCode || null,
+      material:            requiresMaterial ? (matCode || null) : null,
       materialDevelopment: d1 || null,
       unitConsumption:     unit ?? 'Und',
       unitPurchase:        'Und',
@@ -138,7 +144,8 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
     >
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
 
-            {/* Material */}
+            {/* Material — only for segments 0,1,2,3,6 */}
+            {requiresMaterial && (
             <FormSection title="Material" first>
               {itemType.material ? (
                 <div className="flex items-center gap-3 rounded border border-[#D0D0D0] bg-[#f7f8fa] px-3 py-2.5">
@@ -151,6 +158,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
                 </FormField>
               )}
             </FormSection>
+            )}
 
             {/* Dimensiones — always shown; labels adapt to weightMethod when set */}
             <FormSection title="Dimensiones">

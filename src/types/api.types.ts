@@ -37,11 +37,12 @@ export type DimensionUnit = WeightMethod
 
 export interface ItemClass {
   id: number
+  familyId: number
+  segmentCode: string
   code: string
   name: string
   abbreviation: string | null
   description: string | null
-  familyId: number
   material: string | null
   specificWeight: number | null
   nominalDimension: number | null
