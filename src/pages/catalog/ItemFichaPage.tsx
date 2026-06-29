@@ -1324,6 +1324,7 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
           {/* Technical + Pricing + Image */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <SectionCard title="Datos Técnicos">
+              <InfoRow label="Método de peso" value={item.weightMethod} />
               <InfoRow label="Dimensión 2" value={item.dim2 != null ? String(item.dim2) : null} />
               <InfoRow label="Dimensión 3" value={item.dim3 != null ? String(item.dim3) : null} />
               <InfoRow label="Peso (kg)" value={item.weight != null ? fmt(item.weight, 4) : null} />

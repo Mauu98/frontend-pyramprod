@@ -114,6 +114,7 @@ export interface ItemDetail {
   invoiceStockMargin: number | null
   operationComplement: string | null
   functionName: string | null
+  weightMethod: WeightMethod | null
 }
 
 // ─── Stock module ─────────────────────────────────────────────────────────────

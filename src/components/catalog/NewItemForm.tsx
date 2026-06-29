@@ -152,42 +152,44 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
               )}
             </FormSection>
 
-            {/* Dimensiones */}
-            {unit && (
-              <FormSection title="Dimensiones">
-                <div className={cn('grid gap-4', needD3 ? 'grid-cols-3' : needD2 ? 'grid-cols-2' : 'grid-cols-1')}>
-                  <FormField label={unit ? d1Label[unit] : 'Desarrollo'} required error={!!errors.d1 && 'Requerido'}>
+            {/* Dimensiones — always shown; labels adapt to weightMethod when set */}
+            <FormSection title="Dimensiones">
+              {unit && (
+                <div className="mb-3 flex items-center gap-2 rounded border border-[#E8E8E8] bg-[#f7f8fa] px-3 py-2">
+                  <Weight size={13} className="text-[#888888]" />
+                  <span className="text-[13px] text-[#555555]">Método: <strong>{unit}</strong></span>
+                </div>
+              )}
+              <div className={cn('grid gap-4', needD3 ? 'grid-cols-3' : needD2 ? 'grid-cols-2' : 'grid-cols-2')}>
+                <FormField label={unit ? d1Label[unit] : 'Desarrollo / dim1'} optional>
+                  <input type="number" step="0.001" min="0" placeholder="0.000"
+                    {...register('d1')}
+                    className={inputBase}
+                  />
+                </FormField>
+                <FormField label={unit === 'Mm.' ? 'Ancho (mm)' : unit === 'Mm3.' ? 'Alto (mm)' : 'Dim 2'} optional>
+                  <input type="number" step="0.001" min="0" placeholder="0.000"
+                    {...register('d2')}
+                    className={inputBase}
+                  />
+                </FormField>
+                {needD3 && (
+                  <FormField label="Espesor (mm)" optional>
                     <input type="number" step="0.001" min="0" placeholder="0.000"
-                      {...register('d1', { required: true, min: 0.001 })}
-                      className={cn(inputBase, errors.d1 && inputError)}
+                      {...register('d3')}
+                      className={inputBase}
                     />
                   </FormField>
-                  {needD2 && (
-                    <FormField label={unit === 'Mm.' ? 'Ancho (mm)' : 'Alto (mm)'} required error={!!errors.d2 && 'Requerido'}>
-                      <input type="number" step="0.001" min="0" placeholder="0.000"
-                        {...register('d2', { required: true, min: 0.001 })}
-                        className={cn(inputBase, errors.d2 && inputError)}
-                      />
-                    </FormField>
-                  )}
-                  {needD3 && (
-                    <FormField label="Espesor (mm)" required error={!!errors.d3 && 'Requerido'}>
-                      <input type="number" step="0.001" min="0" placeholder="0.000"
-                        {...register('d3', { required: true, min: 0.001 })}
-                        className={cn(inputBase, errors.d3 && inputError)}
-                      />
-                    </FormField>
-                  )}
-                </div>
-                {weight !== null && weight > 0 && (
-                  <div className="flex items-center gap-2 rounded border border-[#E8E8E8] bg-[#f7f8fa] px-3 py-2">
-                    <Weight size={13} className="text-[#888888]" />
-                    <span className="text-[13px] text-[#555555]">Peso calculado</span>
-                    <span className="ml-auto font-mono text-[14px] font-semibold text-[#1A1A1A]">{weight.toFixed(6)} kg</span>
-                  </div>
                 )}
-              </FormSection>
-            )}
+              </div>
+              {weight !== null && weight > 0 && (
+                <div className="mt-2 flex items-center gap-2 rounded border border-[#E8E8E8] bg-[#f7f8fa] px-3 py-2">
+                  <Weight size={13} className="text-[#888888]" />
+                  <span className="text-[13px] text-[#555555]">Peso calculado</span>
+                  <span className="ml-auto font-mono text-[14px] font-semibold text-[#1A1A1A]">{weight.toFixed(6)} kg</span>
+                </div>
+              )}
+            </FormSection>
 
             {/* Denominación */}
             <FormSection title="Denominación">
