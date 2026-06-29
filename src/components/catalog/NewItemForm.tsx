@@ -111,7 +111,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
     onSuccess: item => { qc.invalidateQueries({ queryKey: ['items', itemType.id] }); onSave(item) },
   })
 
-  const needD2 = unit === 'Mm.' || unit === 'Mm3.'
+  const needD2 = unit === 'Mm.' || unit === 'Mm2.' || unit === 'Mm3.'
   const needD3 = unit === 'Mm3.'
   const d1Label: Record<WeightMethod, string> = {
     'Mm.': 'Largo (mm)', 'Mm2.': 'Área (mm²)', 'Mm3.': 'Largo (mm)',

@@ -719,6 +719,144 @@ function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
   )
 }
 
+// ─── Section calculator ───────────────────────────────────────────────────────
+type SectionShape = {
+  id: string
+  label: string
+  paramLabels: string[]
+  compute: (vals: number[]) => number
+}
+
+const SECTION_SHAPES: SectionShape[] = [
+  { id: 'round_solid',  label: 'Barra redonda',    paramLabels: ['Diámetro D'],                   compute: ([D])          => Math.PI * D * D / 4 },
+  { id: 'round_hollow', label: 'Caño redondo',      paramLabels: ['Diámetro ext.', 'Diámetro int.'], compute: ([De, Di])     => Math.PI * (De * De - Di * Di) / 4 },
+  { id: 'flat_bar',     label: 'Planchuela',        paramLabels: ['Ancho', 'Espesor'],             compute: ([A, B])        => A * B },
+  { id: 'square_solid', label: 'Barra cuadrada',    paramLabels: ['Lado L'],                       compute: ([L])           => L * L },
+  { id: 'square_tube',  label: 'Tubo cuadrado',     paramLabels: ['Lado ext.', 'Espesor'],         compute: ([L, e])        => L * L - (L - 2 * e) * (L - 2 * e) },
+  { id: 'rect_tube',    label: 'Tubo rectangular',  paramLabels: ['Lado A', 'Lado B', 'Espesor'],  compute: ([A, B, e])     => A * B - (A - 2 * e) * (B - 2 * e) },
+  { id: 'angle_l',      label: 'Perfil L',          paramLabels: ['Ala A', 'Ala B', 'Espesor'],   compute: ([A, B, e])     => (A + B - e) * e },
+  { id: 'channel_u',    label: 'Perfil U/C',        paramLabels: ['Alto H', 'Ancho B', 'Espesor'], compute: ([H, B, e])     => H * e + 2 * (B - e) * e },
+]
+
+function SectionShapeIcon({ id }: { id: string }) {
+  const s = 36; const c = s / 2; const t = 4
+  switch (id) {
+    case 'round_solid':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><circle cx={c} cy={c} r={14} fill="#6B7280" /></svg>
+    case 'round_hollow':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><circle cx={c} cy={c} r={14} fill="#6B7280" /><circle cx={c} cy={c} r={10} fill="white" /></svg>
+    case 'flat_bar':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={4} y={13} width={28} height={10} fill="#6B7280" rx={1} /></svg>
+    case 'square_solid':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={6} y={6} width={24} height={24} fill="#6B7280" /></svg>
+    case 'square_tube':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={5} y={5} width={26} height={26} fill="#6B7280" /><rect x={5 + t} y={5 + t} width={26 - 2 * t} height={26 - 2 * t} fill="white" /></svg>
+    case 'rect_tube':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={3} y={9} width={30} height={18} fill="#6B7280" /><rect x={3 + t} y={9 + t} width={30 - 2 * t} height={18 - 2 * t} fill="white" /></svg>
+    case 'angle_l':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><polyline points={`7,7 7,29 29,29`} fill="none" stroke="#6B7280" strokeWidth={t} strokeLinecap="square" /></svg>
+    case 'channel_u':
+      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><polyline points={`7,7 7,29 29,29 29,7`} fill="none" stroke="#6B7280" strokeWidth={t} strokeLinecap="square" /></svg>
+    default:
+      return <div className="h-9 w-9 rounded bg-slate-100" />
+  }
+}
+
+function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
+  const [active, setActive] = useState<SectionShape | null>(null)
+  const [vals, setVals] = useState<string[]>([])
+  const [open, setOpen] = useState(false)
+
+  const openShape = (shape: SectionShape) => {
+    setActive(shape)
+    setVals(Array(shape.paramLabels.length).fill(''))
+    setOpen(true)
+  }
+
+  const sectionMm2 = active ? (() => {
+    const nums = vals.map(v => parseFloat(v))
+    if (nums.some(n => isNaN(n) || n <= 0)) return null
+    const r = active.compute(nums)
+    return isFinite(r) && r > 0 ? r : null
+  })() : null
+
+  return (
+    <>
+      <p className="mb-2 text-[12px] font-medium text-[#344054]">Cálculo de secciones en Mm2.:</p>
+      <div className="grid grid-cols-4 gap-2">
+        {SECTION_SHAPES.map(shape => (
+          <button
+            key={shape.id}
+            type="button"
+            onClick={() => openShape(shape)}
+            className="flex flex-col items-center gap-1.5 rounded-lg border border-[#E4E7EC] bg-white p-2.5 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
+          >
+            <SectionShapeIcon id={shape.id} />
+            <span className="text-[10px] leading-tight text-[#344054]">{shape.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <Dialog.Root open={open} onOpenChange={setOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[60] w-[380px] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl focus:outline-none">
+            <Dialog.Title className="mb-1 text-[16px] font-bold text-[#111827]">
+              Modificar Cantidad en Receta:
+            </Dialog.Title>
+            <Dialog.Description className="mb-5 text-[13px] text-[#667085]">
+              {active?.label}
+            </Dialog.Description>
+
+            <div className="flex flex-col gap-3">
+              {active?.paramLabels.map((label, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <label className="w-28 shrink-0 text-right text-[13px] text-[#344054]">{label}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={vals[i] ?? ''}
+                    onChange={e => setVals(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
+                    className="flex-1 rounded-lg border border-[#D0D5DD] px-3 py-2 text-[13px] focus:border-[#2C6B2F] focus:outline-none"
+                    placeholder="0.000"
+                  />
+                  <span className="w-8 text-[12px] text-[#667085]">Mm.</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#E4E7EC] bg-[#F9FAFB] px-4 py-3">
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#667085]">Sección en Mm2.</span>
+              <span className="ml-auto font-mono text-[15px] font-bold text-[#111827]">
+                {sectionMm2 != null ? sectionMm2.toFixed(3) : '0.000'}
+              </span>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="h-10 rounded-xl px-5 text-[14px] font-medium text-[#6B7280] hover:bg-[#F3F4F6]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={sectionMm2 == null}
+                onClick={() => { if (sectionMm2 != null) { onCopy(sectionMm2); setOpen(false) } }}
+                className="h-10 rounded-xl bg-[#2C6B2F] px-5 text-[14px] font-semibold text-white transition hover:bg-[#245A27] disabled:opacity-40"
+              >
+                Copiar Sección
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
+  )
+}
+
 // ─── Item class form ──────────────────────────────────────────────────────────
 const WEIGHT_METHODS = ['Mm.', 'Mm2.', 'Mm3.', 'Kg./Und', 'Und/Kg.'] as const
 
@@ -863,6 +1001,12 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
                 <input type="number" step="0.00000001" {...register('nominalDimension')}
                   className={inputBase} placeholder="0,00000000" />
               </FormField>
+
+              {['Mm.', 'Mm2.'].includes(weightMethod) && (
+                <SectionCalculator
+                  onCopy={v => setValue('nominalDimension', v.toFixed(6))}
+                />
+              )}
             </div>
           )}
         </div>
