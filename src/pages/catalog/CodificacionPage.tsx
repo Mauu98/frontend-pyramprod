@@ -720,39 +720,148 @@ function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
 }
 
 // ─── Item class form ──────────────────────────────────────────────────────────
+const WEIGHT_METHODS = ['Mm.', 'Mm2.', 'Mm3.', 'Kg./Und', 'Und/Kg.'] as const
+
 function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   item: ItemClass | null; familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
 }) {
   const qc = useQueryClient()
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
-      name: item?.name ?? '',
-      abbreviation: item?.abbreviation ?? '',
-      description: item?.description ?? '',
+      name:             item?.name ?? '',
+      abbreviation:     item?.abbreviation ?? '',
+      description:      item?.description ?? '',
       familyId,
+      weightMethod:     item?.weightMethod ?? '',
+      specificWeight:   item?.specificWeight != null ? String(item.specificWeight) : '',
+      nominalDimension: item?.nominalDimension != null ? String(item.nominalDimension) : '',
+      material:         item?.material ?? '',
+      materialName:     item?.materialName ?? '',
+      operatorName:     item?.operatorName ?? '',
     },
   })
+
+  const weightMethod = watch('weightMethod')
+
+  // Search state for raw material picker
+  const [matSearch, setMatSearch] = useState(item?.material ? `${item.material} — ${item.materialName ?? ''}` : '')
+  const [matResults, setMatResults] = useState<{ fullCode: string; fullName: string }[]>([])
+  const [showMatDrop, setShowMatDrop] = useState(false)
+  const matDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const handleMatSearch = (text: string) => {
+    setMatSearch(text)
+    setValue('material', '')
+    setValue('materialName', '')
+    clearTimeout(matDebounce.current)
+    if (text.length < 2) { setMatResults([]); setShowMatDrop(false); return }
+    matDebounce.current = setTimeout(async () => {
+      const res = await apiClient.get(`/items/materials?term=${encodeURIComponent(text)}`)
+      setMatResults(res.data)
+      setShowMatDrop(true)
+    }, 300)
+  }
+
   const m = useMutation({
     mutationFn: (d: object) => item ? apiClient.put(`/item-classes/${item.id}`, d) : apiClient.post('/item-classes', d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['item-classes', familyId] }); onSave() },
   })
+
+  const onSubmit = (v: Record<string, string>) => {
+    m.mutate({
+      familyId,
+      name:             v.name,
+      abbreviation:     v.abbreviation || null,
+      description:      v.description || null,
+      weightMethod:     v.weightMethod || null,
+      specificWeight:   v.specificWeight !== '' ? Number(v.specificWeight) : null,
+      nominalDimension: v.nominalDimension !== '' ? Number(v.nominalDimension) : null,
+      material:         v.material || null,
+      materialName:     v.materialName || null,
+      operatorName:     v.operatorName || null,
+    })
+  }
+
   return (
-    <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
+    <form onSubmit={handleSubmit(onSubmit as never)} className="flex flex-col gap-6">
       <ParentBadge label="Familia" value={familyLabel} />
-      <FormField label="Abreviatura" optional>
-        <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
-      </FormField>
-      <FormField label="Nombre / Especificación" required error={!!errors.name && 'Campo requerido'}
-        helper='Ej: PLA SAE1010 1"x1/8"'>
-        <input
-          {...register('name', { required: true })}
-          className={cn(inputBase, errors.name && inputError)}
-          placeholder='Ej: PLA SAE1010 1"x1/8"'
-        />
-      </FormField>
-      <FormField label="Descripción" optional>
-        <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción de la clase..." />
-      </FormField>
+
+      <FormSection title="Identificación" first>
+        <FormField label="Nombre / Especificación" required error={!!errors.name && 'Campo requerido'}
+          helper='Ej: PLA SAE1010 1"x1/8"'>
+          <input
+            {...register('name', { required: true })}
+            className={cn(inputBase, errors.name && inputError)}
+            placeholder='Ej: PLA SAE1010 1"x1/8"'
+          />
+        </FormField>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Abreviatura" optional>
+            <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
+          </FormField>
+          <FormField label="Operador / proceso" optional helper="Ej: galvanizado, pintado">
+            <input {...register('operatorName')} maxLength={45} className={inputBase} placeholder="Ej: galvanizado" />
+          </FormField>
+        </div>
+        <FormField label="Descripción" optional>
+          <textarea {...register('description')} rows={2} className={textareaBase} />
+        </FormField>
+      </FormSection>
+
+      <FormSection title="Método de peso calculado">
+        <FormField label="Método" optional>
+          <select {...register('weightMethod')} className={inputBase}>
+            <option value="">Sin método (peso manual)</option>
+            {WEIGHT_METHODS.map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </FormField>
+        {weightMethod && (
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Peso específico (kg/m³ o similar)" optional>
+              <input type="number" step="0.0001" {...register('specificWeight')} className={inputBase} placeholder="7850.0000" />
+            </FormField>
+            <FormField label="Dimensión nominal" optional>
+              <input type="number" step="0.001" {...register('nominalDimension')} className={inputBase} placeholder="0.000" />
+            </FormField>
+          </div>
+        )}
+      </FormSection>
+
+      <FormSection title="Materia prima por defecto">
+        <FormField label="Material" optional helper="Se pre-carga al crear ítems de esta clase">
+          <div className="relative">
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
+            <input
+              value={matSearch}
+              onChange={e => handleMatSearch(e.target.value)}
+              onFocus={() => { if (matResults.length) setShowMatDrop(true) }}
+              className={cn(inputBase, 'pl-9')}
+              placeholder="Buscar materia prima..."
+            />
+            {showMatDrop && matResults.length > 0 && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
+                {matResults.slice(0, 8).map(r => (
+                  <button key={r.fullCode} type="button"
+                    onClick={() => {
+                      setValue('material', r.fullCode)
+                      setValue('materialName', r.fullName)
+                      setMatSearch(`${r.fullCode} — ${r.fullName}`)
+                      setShowMatDrop(false)
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
+                  >
+                    <span className="shrink-0 font-mono text-[12px] text-[#667085]">{r.fullCode}</span>
+                    <span className="text-[14px] text-[#101828]">{r.fullName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </FormField>
+      </FormSection>
+
       {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
       <FormActions pending={m.isPending} isEdit={!!item} label="Crear clase" onClose={onClose} />
     </form>
