@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
+import { useForm } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft, Package2, AlertTriangle, Pencil, Trash2, Plus, Check, X, Search,
   Image as ImageIcon, Download, Share2, Copy, ChevronDown, ChevronRight, Layers,
+  BarChart2,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import type { ItemDetail } from '@/types/api.types'
 import { cn } from '@/lib/utils'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { FormActions, ErrorBanner } from '@/components/ui/form-field'
-import { inputBase } from '@/components/ui/form-tokens'
+import { FormActions, ErrorBanner, FormField, FormSection } from '@/components/ui/form-field'
+import { inputBase, textareaBase } from '@/components/ui/form-tokens'
 
 // ─── Local types ──────────────────────────────────────────────────────────────
 
@@ -581,6 +583,248 @@ function AddFormulaDialog({ open, onClose, productId, onSaved }: {
   )
 }
 
+// ─── Stock adjust dialog ──────────────────────────────────────────────────────
+
+function StockAdjustDialog({ open, itemId, onClose, onSaved }: {
+  open: boolean; itemId: number; onClose: () => void; onSaved: () => void
+}) {
+  const [available, setAvailable] = useState('')
+  const [future, setFuture]       = useState('')
+  const [apiErr, setApiErr]       = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) { setAvailable(''); setFuture(''); setApiErr(null) }
+  }, [open])
+
+  const m = useMutation({
+    mutationFn: () => apiClient.patch(`/items/${itemId}/stock`, {
+      availableDelta: available !== '' ? Number(available) : undefined,
+      futureDelta:    future    !== '' ? Number(future)    : undefined,
+    }),
+    onSuccess: () => { onSaved(); onClose() },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setApiErr(msg ?? 'No se pudo ajustar el stock.')
+    },
+  })
+
+  const hasValue = available !== '' || future !== ''
+
+  return (
+    <FormDialog open={open} title="Ajustar stock" onClose={onClose} width="w-[420px]">
+      <form
+        onSubmit={e => { e.preventDefault(); setApiErr(null); if (hasValue) m.mutate() }}
+        className="flex flex-col gap-7"
+      >
+        <p className="text-[13px] text-[#667085]">
+          Ingresá el delta (positivo para entrada, negativo para salida). Dejá vacío lo que no cambia.
+        </p>
+        <div className="grid grid-cols-2 gap-5">
+          <FormField label="Δ Disponible" optional>
+            <input
+              type="number" step="0.001"
+              value={available}
+              onChange={e => setAvailable(e.target.value)}
+              className={inputBase}
+              placeholder="0.000"
+            />
+          </FormField>
+          <FormField label="Δ Futuro" optional>
+            <input
+              type="number" step="0.001"
+              value={future}
+              onChange={e => setFuture(e.target.value)}
+              className={inputBase}
+              placeholder="0.000"
+            />
+          </FormField>
+        </div>
+        {apiErr && <ErrorBanner message={apiErr} />}
+        <FormActions pending={m.isPending} isEdit={false} label="Aplicar ajuste" onClose={onClose} />
+      </form>
+    </FormDialog>
+  )
+}
+
+// ─── Edit item dialog ─────────────────────────────────────────────────────────
+
+function EditItemDialog({ open, item, onClose, onSaved }: {
+  open: boolean; item: ItemDetail; onClose: () => void; onSaved: () => void
+}) {
+  const qc = useQueryClient()
+  const [apiErr, setApiErr] = useState<string | null>(null)
+
+  const { register, handleSubmit, reset } = useForm({
+    defaultValues: {
+      fullName:            item.fullName,
+      abbreviation:        item.abbreviation ?? '',
+      description:         '',
+      functionName:        item.functionName ?? '',
+      operationComplement: item.operationComplement ?? '',
+      dim2:                item.dim2 != null ? String(item.dim2) : '',
+      dim3:                item.dim3 != null ? String(item.dim3) : '',
+      stockMin:            item.stockMin != null ? String(item.stockMin) : '',
+      stockMax:            item.stockMax != null ? String(item.stockMax) : '',
+      warehouseZone:       item.warehouseZone ?? '',
+      warehouseRack:       item.warehouseRack ?? '',
+      warehouseSlot:       item.warehouseSlot ?? '',
+      salePrice:           item.salePrice != null ? String(item.salePrice) : '',
+      costPrice:           item.costPrice != null ? String(item.costPrice) : '',
+      currency:            item.currency ?? 'ARS',
+      daysLeadTime:        item.daysLeadTime != null ? String(item.daysLeadTime) : '',
+      productionMemo:      item.productionMemo ?? '',
+      observations:        item.observations ?? '',
+    },
+  })
+
+  useEffect(() => {
+    if (open) {
+      reset({
+        fullName:            item.fullName,
+        abbreviation:        item.abbreviation ?? '',
+        description:         '',
+        functionName:        item.functionName ?? '',
+        operationComplement: item.operationComplement ?? '',
+        dim2:                item.dim2 != null ? String(item.dim2) : '',
+        dim3:                item.dim3 != null ? String(item.dim3) : '',
+        stockMin:            item.stockMin != null ? String(item.stockMin) : '',
+        stockMax:            item.stockMax != null ? String(item.stockMax) : '',
+        warehouseZone:       item.warehouseZone ?? '',
+        warehouseRack:       item.warehouseRack ?? '',
+        warehouseSlot:       item.warehouseSlot ?? '',
+        salePrice:           item.salePrice != null ? String(item.salePrice) : '',
+        costPrice:           item.costPrice != null ? String(item.costPrice) : '',
+        currency:            item.currency ?? 'ARS',
+        daysLeadTime:        item.daysLeadTime != null ? String(item.daysLeadTime) : '',
+        productionMemo:      item.productionMemo ?? '',
+        observations:        item.observations ?? '',
+      })
+      setApiErr(null)
+    }
+  }, [open, item, reset])
+
+  const m = useMutation({
+    mutationFn: (d: Record<string, unknown>) => apiClient.put(`/items/${item.id}`, d),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['item-detail', item.id] })
+      onSaved()
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setApiErr(msg ?? 'No se pudo guardar los cambios.')
+    },
+  })
+
+  const onSubmit = (v: Record<string, string>) => {
+    setApiErr(null)
+    m.mutate({
+      typeId:              item.typeId,
+      fullName:            v.fullName,
+      abbreviation:        v.abbreviation || null,
+      functionName:        v.functionName || null,
+      operationComplement: v.operationComplement || null,
+      dim2:                v.dim2 !== '' ? Number(v.dim2) : null,
+      dim3:                v.dim3 !== '' ? Number(v.dim3) : null,
+      stockMin:            v.stockMin !== '' ? Number(v.stockMin) : null,
+      stockMax:            v.stockMax !== '' ? Number(v.stockMax) : null,
+      warehouseZone:       v.warehouseZone || null,
+      warehouseRack:       v.warehouseRack || null,
+      warehouseSlot:       v.warehouseSlot || null,
+      salePrice:           v.salePrice !== '' ? Number(v.salePrice) : null,
+      costPrice:           v.costPrice !== '' ? Number(v.costPrice) : null,
+      currency:            v.currency || 'ARS',
+      daysLeadTime:        v.daysLeadTime !== '' ? Number(v.daysLeadTime) : null,
+      productionMemo:      v.productionMemo || null,
+      observations:        v.observations || null,
+    })
+  }
+
+  return (
+    <FormDialog open={open} title="Editar ítem" width="w-[640px]" onClose={onClose}>
+      <form onSubmit={handleSubmit(onSubmit as never)} className="flex flex-col gap-6">
+
+        <FormSection title="Identificación" first>
+          <FormField label="Nombre completo" required>
+            <input {...register('fullName', { required: true })} maxLength={145} className={inputBase} />
+          </FormField>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Función" optional helper="Ej: Soporte lateral, Tapa frontal...">
+              <input {...register('functionName')} maxLength={65} className={inputBase} />
+            </FormField>
+            <FormField label="Abreviatura" optional>
+              <input {...register('abbreviation')} maxLength={25} className={inputBase} />
+            </FormField>
+          </div>
+          <FormField label="Complemento operación" optional>
+            <input {...register('operationComplement')} maxLength={145} className={inputBase} placeholder="Ej: galvanizado, pintado..." />
+          </FormField>
+        </FormSection>
+
+        <FormSection title="Dimensiones y stock">
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Dimensión 2" optional>
+              <input type="number" step="0.001" {...register('dim2')} className={inputBase} placeholder="0.000" />
+            </FormField>
+            <FormField label="Dimensión 3" optional>
+              <input type="number" step="0.001" {...register('dim3')} className={inputBase} placeholder="0.000" />
+            </FormField>
+            <FormField label="Stock mínimo" optional>
+              <input type="number" step="0.001" {...register('stockMin')} className={inputBase} placeholder="0.000" />
+            </FormField>
+            <FormField label="Stock máximo" optional>
+              <input type="number" step="0.001" {...register('stockMax')} className={inputBase} placeholder="0.000" />
+            </FormField>
+          </div>
+        </FormSection>
+
+        <FormSection title="Depósito">
+          <div className="grid grid-cols-3 gap-4">
+            <FormField label="Zona" optional>
+              <input {...register('warehouseZone')} maxLength={10} className={inputBase} />
+            </FormField>
+            <FormField label="Rack" optional>
+              <input {...register('warehouseRack')} maxLength={10} className={inputBase} />
+            </FormField>
+            <FormField label="Casilla" optional>
+              <input {...register('warehouseSlot')} maxLength={10} className={inputBase} />
+            </FormField>
+          </div>
+        </FormSection>
+
+        <FormSection title="Precio y compras">
+          <div className="grid grid-cols-3 gap-4">
+            <FormField label="Precio venta" optional>
+              <input type="number" step="0.01" {...register('salePrice')} className={inputBase} placeholder="0.00" />
+            </FormField>
+            <FormField label="Precio costo" optional>
+              <input type="number" step="0.01" {...register('costPrice')} className={inputBase} placeholder="0.00" />
+            </FormField>
+            <FormField label="Moneda" optional>
+              <input {...register('currency')} maxLength={3} className={inputBase} placeholder="ARS" />
+            </FormField>
+            <FormField label="Días de compra" optional>
+              <input type="number" min="0" {...register('daysLeadTime')} className={inputBase} placeholder="0" />
+            </FormField>
+          </div>
+        </FormSection>
+
+        <FormSection title="Notas">
+          <FormField label="Memo producción" optional>
+            <textarea {...register('productionMemo')} rows={2} className={textareaBase} />
+          </FormField>
+          <FormField label="Observaciones" optional>
+            <textarea {...register('observations')} rows={2} className={textareaBase} />
+          </FormField>
+        </FormSection>
+
+        {apiErr && <ErrorBanner message={apiErr} />}
+        <FormActions pending={m.isPending} isEdit label="Guardar" onClose={onClose} />
+      </form>
+    </FormDialog>
+  )
+}
+
 // ─── Image section ────────────────────────────────────────────────────────────
 
 function ImageSection({ itemId }: { itemId: number }) {
@@ -978,6 +1222,10 @@ function FormulaSection({ itemId }: { itemId: number }) {
 
 export function ItemFichaPage({ itemId }: { itemId: number }) {
   const navigate = useNavigate()
+  const [editOpen, setEditOpen]   = useState(false)
+  const [stockOpen, setStockOpen] = useState(false)
+  const qc = useQueryClient()
+
   const { data: item, isLoading } = useQuery<ItemDetail>({
     queryKey: ['item-detail', itemId],
     queryFn: () => apiClient.get<ItemDetail>(`/items/${itemId}`).then(r => r.data),
@@ -1022,6 +1270,20 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
           <span className="shrink-0 text-[14px] text-[#667085]">({item.abbreviation})</span>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setStockOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-1.5 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB]"
+          >
+            <BarChart2 size={14} strokeWidth={2} />
+            Stock
+          </button>
+          <button
+            onClick={() => setEditOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-[#E4E7EC] px-3 py-1.5 text-[13px] font-medium text-[#344054] transition hover:bg-[#F9FAFB]"
+          >
+            <Pencil size={14} strokeWidth={2} />
+            Editar
+          </button>
           <button
             onClick={() => cloneMut.mutate()}
             disabled={cloneMut.isPending}
@@ -1122,7 +1384,6 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
                 <InfoRow label="Memo Producción" value={item.productionMemo} />
                 <InfoRow label="Observaciones" value={item.observations} />
                 <InfoRow label="Complemento Op." value={item.operationComplement} />
-                <InfoRow label="Complemento Op." value={item.operationComplement} />
               </SectionCard>
             ) : (
               <div /> // grid placeholder so warehouse stays half-width
@@ -1140,6 +1401,20 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
 
         </div>
       </div>
+
+      <EditItemDialog
+        open={editOpen}
+        item={item}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['item-detail', itemId] })}
+      />
+
+      <StockAdjustDialog
+        open={stockOpen}
+        itemId={itemId}
+        onClose={() => setStockOpen(false)}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['item-detail', itemId] })}
+      />
     </div>
   )
 }

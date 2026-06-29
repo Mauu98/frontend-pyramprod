@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -12,13 +12,13 @@ import {
 import type { Segment, Family, ItemClass, ItemSummary, ItemDetail } from '@/types/api.types'
 import { NewItemForm } from '@/components/catalog/NewItemForm'
 import {
-  Plus, Search, Pencil, Trash2, ChevronRight, Layers,
+  Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
   AlertTriangle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | null
+type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | 'family-batch' | 'class-batch' | 'copy-to-family' | null
 interface ColRow { id: number; code: string; name: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -291,12 +291,13 @@ const SINGULAR: Record<string, string> = {
 
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
-  onSelect, onNew, onEdit, onDelete,
+  onSelect, onNew, onEdit, onDelete, onBatch, onCopy,
 }: {
   title: string; icon: LucideIcon; rows: ColRow[]; selected: ColRow | null
   isLoading?: boolean; enabled: boolean; placeholderText: string
   onSelect: (r: ColRow) => void; onNew: () => void
   onEdit: (r: ColRow) => void; onDelete: (r: ColRow) => void
+  onBatch?: () => void; onCopy?: () => void
 }) {
   const [q, setQ] = useState('')
   const filtered  = rows.filter(r => !q || r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q))
@@ -316,13 +317,33 @@ function CatalogColumn({
           <p className="text-[11px] text-slate-400">{rows.length} registros</p>
         </div>
         {enabled && (
-          <button
-            onClick={onNew}
-            title={`Nuevo ${singular}`}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95"
-          >
-            <Plus size={13} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {onCopy && (
+              <button
+                onClick={onCopy}
+                title={`Copiar ${singular}s de otra familia`}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+              >
+                <Copy size={13} />
+              </button>
+            )}
+            {onBatch && (
+              <button
+                onClick={onBatch}
+                title={`Importar ${singular}s desde texto`}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+              >
+                <ListPlus size={13} />
+              </button>
+            )}
+            <button
+              onClick={onNew}
+              title={`Nuevo ${singular}`}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95"
+            >
+              <Plus size={13} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -738,6 +759,213 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   )
 }
 
+// ─── Batch family import form ─────────────────────────────────────────────────
+function BatchFamilyImportForm({ segmentId, segmentLabel, onSave, onClose }: {
+  segmentId: number; segmentLabel: string; onSave: () => void; onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [text, setText] = useState('')
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const validLines = text.split('\n').filter(l => l.trim() && l.includes(';'))
+
+  const m = useMutation({
+    mutationFn: () => apiClient.post(`/families/segments/${segmentId}/batch-text`, { text: text.trim() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['families', segmentId] })
+      onSave()
+    },
+    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar las familias.'),
+  })
+
+  return (
+    <form
+      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (validLines.length > 0) m.mutate() }}
+      className="flex flex-col gap-6"
+    >
+      <ParentBadge label="Segmento" value={segmentLabel} />
+
+      <FormSection title="Pegá el texto" first>
+        <p className="text-[13px] text-slate-400">
+          Una línea por familia, formato: <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px]">nombre;abreviatura</code>
+        </p>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          rows={10}
+          placeholder={'Planchuela;PLA\nTrefilado;TRE\nCañería;CAÑ'}
+          className={cn(textareaBase, 'font-mono text-[13px]')}
+        />
+      </FormSection>
+
+      {validLines.length > 0 && (
+        <div className="flex items-center gap-3 rounded-xl bg-[#2C6B2F]/8 px-5 py-3.5">
+          <FolderOpen size={14} className="shrink-0 text-[#2C6B2F]" />
+          <p className="text-[14px] text-[#2C6B2F]">
+            Se crearán <strong>{validLines.length}</strong> {validLines.length === 1 ? 'familia' : 'familias'}
+          </p>
+        </div>
+      )}
+
+      {submitError && <ErrorBanner message={submitError} />}
+      <FormActions
+        pending={m.isPending}
+        isEdit={false}
+        label={`Importar ${validLines.length} familia${validLines.length !== 1 ? 's' : ''}`}
+        onClose={onClose}
+      />
+    </form>
+  )
+}
+
+// ─── Batch class import form ──────────────────────────────────────────────────
+function BatchClassImportForm({ familyId, familyLabel, onSave, onClose }: {
+  familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [text, setText] = useState('')
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const validLines = text.split('\n').filter(l => l.trim() && l.includes(';'))
+
+  const m = useMutation({
+    mutationFn: () => apiClient.post(`/item-classes/families/${familyId}/batch-text`, { text: text.trim() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['item-classes', familyId] })
+      onSave()
+    },
+    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar las clases.'),
+  })
+
+  return (
+    <form
+      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (validLines.length > 0) m.mutate() }}
+      className="flex flex-col gap-6"
+    >
+      <ParentBadge label="Familia" value={familyLabel} />
+
+      <FormSection title="Pegá el texto" first>
+        <p className="text-[13px] text-slate-400">
+          Una línea por clase, formato: <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px]">nombre;abreviatura</code>
+        </p>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          rows={10}
+          placeholder={'PLA SAE1010 1"x1/8";PLA1-1/8\nPLA SAE1010 1"x3/16";PLA1-3/16'}
+          className={cn(textareaBase, 'font-mono text-[13px]')}
+        />
+      </FormSection>
+
+      {validLines.length > 0 && (
+        <div className="flex items-center gap-3 rounded-xl bg-[#2C6B2F]/8 px-5 py-3.5">
+          <Package size={14} className="shrink-0 text-[#2C6B2F]" />
+          <p className="text-[14px] text-[#2C6B2F]">
+            Se crearán <strong>{validLines.length}</strong> {validLines.length === 1 ? 'clase' : 'clases'}
+          </p>
+        </div>
+      )}
+
+      {submitError && <ErrorBanner message={submitError} />}
+      <FormActions
+        pending={m.isPending}
+        isEdit={false}
+        label={`Importar ${validLines.length} clase${validLines.length !== 1 ? 's' : ''}`}
+        onClose={onClose}
+      />
+    </form>
+  )
+}
+
+// ─── Copy classes to family form ──────────────────────────────────────────────
+function CopyToFamilyForm({ sourceFamilyId, sourceFamilyLabel, onSave, onClose }: {
+  sourceFamilyId: number; sourceFamilyLabel: string; onSave: () => void; onClose: () => void
+}) {
+  const [searchText, setSearchText] = useState('')
+  const [results, setResults] = useState<Family[]>([])
+  const [selected, setSelected] = useState<Family | null>(null)
+  const [showDrop, setShowDrop] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const { data: allFamilies = [] } = useQuery<Family[]>({
+    queryKey: ['families-all'],
+    queryFn: () => apiClient.get<Family[]>('/families').then(r => r.data),
+  })
+
+  useEffect(() => {
+    if (!searchText || searchText.length < 2) { setResults([]); setShowDrop(false); return }
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      const q = searchText.toLowerCase()
+      const filtered = allFamilies.filter(f =>
+        f.id !== sourceFamilyId && (f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q))
+      )
+      setResults(filtered.slice(0, 10))
+      setShowDrop(true)
+    }, 200)
+  }, [searchText, allFamilies, sourceFamilyId])
+
+  const qc = useQueryClient()
+  const m = useMutation({
+    mutationFn: () => apiClient.post('/item-classes/copy-to-family', {
+      sourceFamilyId,
+      targetFamilyId: selected!.id,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['item-classes', selected!.id] })
+      onSave()
+    },
+    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al copiar las clases.'),
+  })
+
+  return (
+    <form
+      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (selected) m.mutate() }}
+      className="flex flex-col gap-6"
+    >
+      <ParentBadge label="Origen" value={sourceFamilyLabel} />
+
+      <FormSection title="Familia destino" first>
+        <p className="text-[13px] text-slate-400">
+          Se copiarán todas las clases de <strong>{sourceFamilyLabel}</strong> a la familia que elijas.
+        </p>
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
+          <input
+            value={selected ? `${selected.code} — ${selected.name}` : searchText}
+            onChange={e => { setSearchText(e.target.value); setSelected(null) }}
+            onFocus={() => { if (selected) { setSelected(null); setSearchText('') }; if (results.length) setShowDrop(true) }}
+            className={cn(inputBase, 'pl-9')}
+            placeholder="Buscar familia destino..."
+          />
+          {showDrop && results.length > 0 && (
+            <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
+              {results.map(f => (
+                <button key={f.id} type="button"
+                  onClick={() => { setSelected(f); setShowDrop(false) }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
+                >
+                  <span className="shrink-0 font-mono text-[12px] text-[#667085]">{f.code}</span>
+                  <span className="text-[14px] text-[#101828]">{f.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </FormSection>
+
+      {submitError && <ErrorBanner message={submitError} />}
+      <FormActions
+        pending={m.isPending}
+        isEdit={false}
+        label="Copiar clases"
+        onClose={onClose}
+      />
+    </form>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const SEL_KEY = 'codificacion:selection'
@@ -916,6 +1144,7 @@ export function CodificacionPage() {
             onNew={() => openNew('family')}
             onEdit={row => openEdit('family', families.find(f => f.id === row.id)!)}
             onDelete={row => { setDelTarget({ kind: 'family', row }); setDelApiErr(null) }}
+            onBatch={() => setSheet('family-batch')}
           />
 
           <CatalogColumn
@@ -928,6 +1157,8 @@ export function CodificacionPage() {
             onNew={() => openNew('item-class')}
             onEdit={row => openEdit('item-class', itemClasses.find(t => t.id === row.id)!)}
             onDelete={row => { setDelTarget({ kind: 'item-class', row }); setDelApiErr(null) }}
+            onBatch={() => setSheet('class-batch')}
+            onCopy={() => setSheet('copy-to-family')}
           />
 
           <ItemsColumn
@@ -1021,6 +1252,57 @@ export function CodificacionPage() {
               qc.invalidateQueries({ queryKey: ['items', selClass.id] })
               setSheet(null)
             }}
+            onClose={() => setSheet(null)}
+          />
+        )}
+      </FormDialog>
+
+      <FormDialog
+        open={sheet === 'family-batch'}
+        title="Importar familias desde texto"
+        subtitle={selSeg ? `${selSeg.code} — ${selSeg.name}` : undefined}
+        width="w-[600px]"
+        onClose={() => setSheet(null)}
+      >
+        {selSeg && (
+          <BatchFamilyImportForm
+            segmentId={selSeg.id}
+            segmentLabel={`${selSeg.code} — ${selSeg.name}`}
+            onSave={() => setSheet(null)}
+            onClose={() => setSheet(null)}
+          />
+        )}
+      </FormDialog>
+
+      <FormDialog
+        open={sheet === 'class-batch'}
+        title="Importar clases desde texto"
+        subtitle={selFam ? `${selFam.code} — ${selFam.name}` : undefined}
+        width="w-[600px]"
+        onClose={() => setSheet(null)}
+      >
+        {selFam && (
+          <BatchClassImportForm
+            familyId={selFam.id}
+            familyLabel={`${selFam.code} — ${selFam.name}`}
+            onSave={() => setSheet(null)}
+            onClose={() => setSheet(null)}
+          />
+        )}
+      </FormDialog>
+
+      <FormDialog
+        open={sheet === 'copy-to-family'}
+        title="Copiar clases a otra familia"
+        subtitle={selFam ? `Origen: ${selFam.code} — ${selFam.name}` : undefined}
+        width="w-[520px]"
+        onClose={() => setSheet(null)}
+      >
+        {selFam && (
+          <CopyToFamilyForm
+            sourceFamilyId={selFam.id}
+            sourceFamilyLabel={`${selFam.code} — ${selFam.name}`}
+            onSave={() => setSheet(null)}
             onClose={() => setSheet(null)}
           />
         )}
