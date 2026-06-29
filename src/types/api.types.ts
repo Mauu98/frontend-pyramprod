@@ -12,7 +12,7 @@ export interface LoginResponse {
   expiresIn: number
 }
 
-export interface Category {
+export interface Segment {
   id: number
   code: string
   name: string
@@ -26,26 +26,28 @@ export interface Family {
   name: string
   abbreviation: string | null
   description: string | null
-  categoryId: number
+  segmentId: number
 }
 
-// unitOfMeasure controls which dimension fields are active and the weight formula
-export type DimensionUnit = 'Mm.' | 'Mm2.' | 'Mm3.' | 'Kg./Und' | 'Und/Kg.'
+/** Controls which dimension fields are active and the weight formula. */
+export type WeightMethod = 'Mm.' | 'Mm2.' | 'Mm3.' | 'Kg./Und' | 'Und/Kg.'
 
-export interface ItemType {
+/** @deprecated Use WeightMethod */
+export type DimensionUnit = WeightMethod
+
+export interface ItemClass {
   id: number
   code: string
   name: string
   abbreviation: string | null
   description: string | null
   familyId: number
-  // material & operation data (catecod_3)
-  material: string | null         // fullCode of the raw material item
-  specificWeight: number | null   // peso_e (kg/mm³ or similar)
-  nominalDimension: number | null // dim_e (dimensional factor)
-  unitOfMeasure: DimensionUnit | null
-  materialName: string | null     // abbreviated name of the material
-  operatorName: string | null     // abbreviated name of the operation
+  material: string | null
+  specificWeight: number | null
+  nominalDimension: number | null
+  weightMethod: WeightMethod | null
+  materialName: string | null
+  operatorName: string | null
 }
 
 export interface ItemSummary {

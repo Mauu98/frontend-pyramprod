@@ -6,24 +6,13 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table'
 import { apiClient } from '@/lib/api-client'
-import type { Category } from '@/types/api.types'
+import type { Segment } from '@/types/api.types'
 import { Tag } from 'lucide-react'
 
-const columns: ColumnDef<Category>[] = [
-  {
-    accessorKey: 'code',
-    header: 'Código',
-    size: 80,
-  },
-  {
-    accessorKey: 'name',
-    header: 'Nombre',
-  },
-  {
-    accessorKey: 'abbreviation',
-    header: 'Abreviatura',
-    size: 120,
-  },
+const columns: ColumnDef<Segment>[] = [
+  { accessorKey: 'code', header: 'Código', size: 80 },
+  { accessorKey: 'name', header: 'Nombre' },
+  { accessorKey: 'abbreviation', header: 'Abreviatura', size: 120 },
   {
     accessorKey: 'description',
     header: 'Descripción',
@@ -32,34 +21,31 @@ const columns: ColumnDef<Category>[] = [
 ]
 
 export function CategoriesPage() {
-  const { data: categories = [], isLoading, isError } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => apiClient.get<Category[]>('/categories').then((r) => r.data),
+  const { data: segments = [], isLoading, isError } = useQuery({
+    queryKey: ['segments'],
+    queryFn: () => apiClient.get<Segment[]>('/segments').then((r) => r.data),
   })
 
   const table = useReactTable({
-    data: categories,
+    data: segments,
     columns,
     getCoreRowModel: getCoreRowModel(),
   })
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="border-b border-border bg-card px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Tag size={18} className="text-primary" />
           <h1 className="text-base font-semibold">Codificación</h1>
-          <span className="text-muted text-sm">/ Categorías</span>
+          <span className="text-muted text-sm">/ Segmentos</span>
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="rounded-lg border border-border bg-card overflow-hidden">
-          {/* Table header row */}
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-medium">Categorías ({categories.length})</h2>
+            <h2 className="text-sm font-medium">Segmentos ({segments.length})</h2>
           </div>
 
           {isLoading && (
@@ -70,7 +56,7 @@ export function CategoriesPage() {
 
           {isError && (
             <div className="flex items-center justify-center py-16 text-destructive text-sm">
-              Error al cargar categorías
+              Error al cargar segmentos
             </div>
           )}
 

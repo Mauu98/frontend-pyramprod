@@ -9,7 +9,7 @@ import {
   FormField, FormSection, FormActions, ParentBadge, ErrorBanner,
   inputBase, textareaBase, inputError,
 } from '@/components/ui/form-field'
-import type { Category, Family, ItemType, ItemSummary, ItemDetail } from '@/types/api.types'
+import type { Segment, Family, ItemClass, ItemSummary, ItemDetail } from '@/types/api.types'
 import { NewItemForm } from '@/components/catalog/NewItemForm'
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers,
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type SheetKind = 'category' | 'family' | 'type' | 'item' | 'batch' | 'rename' | null
+type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | null
 interface ColRow { id: number; code: string; name: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -26,9 +26,9 @@ function getErrMsg(err: unknown): string {
   const d = (err as { response?: { data?: { code?: string; message?: string } } })?.response?.data
   if (!d) return 'No se pudo completar la operación. Verificá la conexión.'
   const byCode: Record<string, string> = {
-    CATEGORY_HAS_FAMILIES: 'La categoría tiene familias. Eliminá las familias primero.',
-    FAMILY_HAS_ITEM_TYPES: 'La familia tiene tipos. Eliminá los tipos primero.',
-    ITEM_TYPE_HAS_ITEMS:   'El tipo tiene ítems. Eliminá los ítems primero.',
+    SEGMENT_HAS_FAMILIES:    'El segmento tiene familias. Eliminá las familias primero.',
+    FAMILY_HAS_ITEM_CLASSES: 'La familia tiene clases. Eliminá las clases primero.',
+    ITEM_CLASS_HAS_ITEMS:    'La clase tiene ítems. Eliminá los ítems primero.',
   }
   return d.code ? (byCode[d.code] ?? d.message ?? 'Error desconocido.') : (d.message ?? 'No se pudo completar.')
 }
@@ -60,33 +60,31 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ─── Context panel ────────────────────────────────────────────────────────────
 function ContextPanel({
-  selCat, selFam, selType, selItem, onNavigate,
+  selSeg, selFam, selClass, selItem, onNavigate,
 }: {
-  selCat:     Category | null
-  selFam:     Family | null
-  selType:    ItemType | null
-  selItem:    ItemSummary | null
+  selSeg:    Segment | null
+  selFam:    Family | null
+  selClass:  ItemClass | null
+  selItem:   ItemSummary | null
   onNavigate: (r: ItemSummary) => void
 }) {
-  if (!selCat) {
+  if (!selSeg) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 bg-[#f7f8fa] p-10 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm">
           <Layers size={26} strokeWidth={1.2} className="text-slate-300" />
         </div>
         <div>
-          <p className="text-[15px] font-semibold text-slate-300">Seleccioná una categoría</p>
+          <p className="text-[15px] font-semibold text-slate-300">Seleccioná un segmento</p>
           <p className="mt-1 text-[13px] text-slate-200">Los detalles aparecerán aquí</p>
         </div>
       </div>
     )
   }
 
-  // ── Item selected ──────────────────────────────────────────────────────────
   if (selItem) {
     return (
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
-        {/* Card header */}
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <div className="border-b border-gray-100 bg-[#2C6B2F]/5 px-5 py-4">
             <div className="flex items-center gap-3">
@@ -116,8 +114,6 @@ function ContextPanel({
             </div>
           </div>
         </div>
-
-        {/* Navigate CTA */}
         <button
           onClick={() => onNavigate(selItem)}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2C6B2F] text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#245A27] active:bg-[#1E4B21]"
@@ -129,8 +125,7 @@ function ContextPanel({
     )
   }
 
-  // ── Type selected ──────────────────────────────────────────────────────────
-  if (selType) {
+  if (selClass) {
     return (
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
@@ -141,27 +136,27 @@ function ContextPanel({
               </div>
               <div className="min-w-0">
                 <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  {selType.code}
+                  {selClass.code}
                 </p>
-                <p className="truncate text-[16px] font-bold text-[#111827]">{selType.name}</p>
+                <p className="truncate text-[16px] font-bold text-[#111827]">{selClass.name}</p>
               </div>
             </div>
           </div>
           <div className="px-5 py-2">
-            {selType.abbreviation && <InfoRow label="Abreviatura" value={selType.abbreviation} />}
-            {selType.material && (
-              <InfoRow label="Material" value={selType.materialName ?? selType.material} />
+            {selClass.abbreviation && <InfoRow label="Abreviatura" value={selClass.abbreviation} />}
+            {selClass.material && (
+              <InfoRow label="Material" value={selClass.materialName ?? selClass.material} />
             )}
-            {selType.unitOfMeasure && <InfoRow label="Unidad de medida" value={selType.unitOfMeasure} />}
-            {selType.specificWeight != null && (
-              <InfoRow label="Peso específico" value={selType.specificWeight.toString()} />
+            {selClass.weightMethod && <InfoRow label="Método de peso" value={selClass.weightMethod} />}
+            {selClass.specificWeight != null && (
+              <InfoRow label="Peso específico" value={selClass.specificWeight.toString()} />
             )}
-            {selType.nominalDimension != null && (
-              <InfoRow label="Dimensión nominal" value={selType.nominalDimension.toString()} />
+            {selClass.nominalDimension != null && (
+              <InfoRow label="Dimensión nominal" value={selClass.nominalDimension.toString()} />
             )}
-            {selType.description && (
+            {selClass.description && (
               <div className="pb-4 pt-3">
-                <p className="text-[13px] leading-relaxed text-slate-400">{selType.description}</p>
+                <p className="text-[13px] leading-relaxed text-slate-400">{selClass.description}</p>
               </div>
             )}
           </div>
@@ -171,7 +166,6 @@ function ContextPanel({
     )
   }
 
-  // ── Family selected ────────────────────────────────────────────────────────
   if (selFam) {
     return (
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
@@ -198,12 +192,11 @@ function ContextPanel({
             )}
           </div>
         </div>
-        <p className="text-center text-[12px] text-slate-300">Seleccioná un tipo para ver sus detalles</p>
+        <p className="text-center text-[12px] text-slate-300">Seleccioná una clase para ver sus detalles</p>
       </div>
     )
   }
 
-  // ── Category selected ──────────────────────────────────────────────────────
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
@@ -214,17 +207,17 @@ function ContextPanel({
             </div>
             <div className="min-w-0">
               <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                {selCat.code}
+                {selSeg.code}
               </p>
-              <p className="truncate text-[16px] font-bold text-[#111827]">{selCat.name}</p>
+              <p className="truncate text-[16px] font-bold text-[#111827]">{selSeg.name}</p>
             </div>
           </div>
         </div>
         <div className="px-5 py-2">
-          {selCat.abbreviation && <InfoRow label="Abreviatura" value={selCat.abbreviation} />}
-          {selCat.description && (
+          {selSeg.abbreviation && <InfoRow label="Abreviatura" value={selSeg.abbreviation} />}
+          {selSeg.description && (
             <div className="pb-4 pt-3">
-              <p className="text-[13px] leading-relaxed text-slate-400">{selCat.description}</p>
+              <p className="text-[13px] leading-relaxed text-slate-400">{selSeg.description}</p>
             </div>
           )}
         </div>
@@ -290,7 +283,11 @@ function ConfirmDialog({
 }
 
 // ─── Catalog column ───────────────────────────────────────────────────────────
-const SINGULAR: Record<string, string> = { Categorias: 'categoría', Familias: 'familia', Tipos: 'tipo' }
+const SINGULAR: Record<string, string> = {
+  Segmentos: 'segmento',
+  Familias:  'familia',
+  Clases:    'clase',
+}
 
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
@@ -310,7 +307,6 @@ function CatalogColumn({
       'flex w-[272px] shrink-0 flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
       !enabled && 'pointer-events-none opacity-25',
     )}>
-      {/* Header — pl-5 pr-7 gives 28px right gap so [+] never looks pinched */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-100 bg-[#f7f8fa] pl-5 pr-7">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F]/10">
           <Icon size={14} className="text-[#2C6B2F]" />
@@ -322,7 +318,7 @@ function CatalogColumn({
         {enabled && (
           <button
             onClick={onNew}
-            title={`Nueva ${singular}`}
+            title={`Nuevo ${singular}`}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95"
           >
             <Plus size={13} />
@@ -330,7 +326,6 @@ function CatalogColumn({
         )}
       </div>
 
-      {/* Search */}
       <div className="shrink-0 border-b border-gray-100 px-4 py-2.5">
         <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-[#f7f8fa] px-3 py-2 transition focus-within:border-[#2C6B2F] focus-within:bg-white">
           <Search size={12} className="shrink-0 text-slate-400" />
@@ -344,7 +339,6 @@ function CatalogColumn({
         </label>
       </div>
 
-      {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         {!enabled ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
@@ -415,14 +409,13 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
   onNew: () => void; onBatch: () => void; onRename: () => void
 }) {
   const [q, setQ] = useState('')
-  const filtered  = rows.filter(r => !q || r.fullName.toLowerCase().includes(q) || r.fullCode.toLowerCase().includes(q))
+  const filtered = rows.filter(r => !q || r.fullName.toLowerCase().includes(q) || r.fullCode.toLowerCase().includes(q))
 
   return (
     <div className={cn(
       'flex w-[320px] shrink-0 flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
       !enabled && 'pointer-events-none opacity-25',
     )}>
-      {/* Header */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-100 bg-[#f7f8fa] pl-5 pr-7">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F]/10">
           <Tag size={14} className="text-[#2C6B2F]" />
@@ -443,7 +436,7 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
           <button
             onClick={onBatch}
             disabled={!enabled}
-            title="Crear múltiples ítems"
+            title="Importar ítems desde texto"
             className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
           >
             <ListPlus size={13} />
@@ -459,7 +452,6 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
         </div>
       </div>
 
-      {/* Search */}
       <div className="shrink-0 border-b border-gray-100 px-4 py-2.5">
         <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-[#f7f8fa] px-3 py-2 transition focus-within:border-[#2C6B2F] focus-within:bg-white">
           <Search size={12} className="shrink-0 text-slate-400" />
@@ -473,12 +465,11 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
         </label>
       </div>
 
-      {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {!enabled ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <Tag size={28} strokeWidth={1} className="text-slate-200" />
-            <p className="text-[13px] text-slate-300">Seleccioná un tipo</p>
+            <p className="text-[13px] text-slate-300">Seleccioná una clase</p>
           </div>
         ) : isLoading ? (
           <div className="flex h-28 items-center justify-center">
@@ -539,98 +530,50 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
   )
 }
 
-// ─── Batch create form ────────────────────────────────────────────────────────
-function BatchCreateForm({ typeId, typeLabel, onSave, onClose }: {
+// ─── Batch import form (txt paste) ────────────────────────────────────────────
+function BatchImportForm({ typeId, typeLabel, onSave, onClose }: {
   typeId: number; typeLabel: string; onSave: () => void; onClose: () => void
 }) {
   const qc = useQueryClient()
-  const [rows, setRows] = useState([{ fullName: '', abbreviation: '' }])
+  const [text, setText] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const addRow = () => setRows(r => [...r, { fullName: '', abbreviation: '' }])
-  const removeRow = (i: number) => setRows(r => r.filter((_, j) => j !== i))
-  const setField = (i: number, field: 'fullName' | 'abbreviation', value: string) =>
-    setRows(r => r.map((row, j) => j === i ? { ...row, [field]: value } : row))
+  const validLines = text.split('\n').filter(l => l.trim() && l.includes(';'))
 
   const m = useMutation({
-    mutationFn: () => apiClient.post('/items/batch', {
-      typeId,
-      items: rows.filter(r => r.fullName.trim()).map(r => ({
-        fullName: r.fullName.trim(),
-        abbreviation: r.abbreviation.trim() || undefined,
-      })),
-    }),
+    mutationFn: () => apiClient.post(`/item-classes/${typeId}/items/batch-text`, { text: text.trim() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['items', typeId] })
       onSave()
     },
-    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al crear los ítems.'),
+    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar los ítems.'),
   })
-
-  const validCount = rows.filter(r => r.fullName.trim()).length
 
   return (
     <form
-      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (validCount > 0) m.mutate() }}
+      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (validLines.length > 0) m.mutate() }}
       className="flex flex-col gap-6"
     >
-      <ParentBadge label="Tipo" value={typeLabel} />
-      <FormSection title="Ítems a crear" first>
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center gap-3 px-1">
-            <span className="w-6 shrink-0" />
-            <span className="flex-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">Nombre completo</span>
-            <span className="w-32 shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-400">Abreviatura</span>
-            <span className="w-8 shrink-0" />
-          </div>
-          {rows.map((row, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <span className="w-6 shrink-0 text-center text-[12px] font-mono text-slate-300">{i + 1}</span>
-              <input
-                value={row.fullName}
-                onChange={e => setField(i, 'fullName', e.target.value)}
-                placeholder="Ej: Perno M8 x 30mm"
-                maxLength={145}
-                className={cn(inputBase, 'flex-1')}
-              />
-              <input
-                value={row.abbreviation}
-                onChange={e => setField(i, 'abbreviation', e.target.value)}
-                placeholder="Abrev."
-                maxLength={25}
-                className={cn(inputBase, 'w-32 shrink-0')}
-              />
-              <button
-                type="button"
-                onClick={() => removeRow(i)}
-                disabled={rows.length === 1}
-                className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-0"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={addRow}
-          className="flex w-fit items-center gap-1.5 rounded-lg px-2 py-1 text-[14px] font-medium text-[#2C6B2F] transition hover:bg-[#2C6B2F]/8"
-        >
-          <Plus size={14} />
-          Agregar fila
-        </button>
+      <ParentBadge label="Clase" value={typeLabel} />
+
+      <FormSection title="Pegá el texto" first>
+        <p className="text-[13px] text-slate-400">
+          Una línea por ítem, formato: <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px]">nombre;abreviatura</code>
+        </p>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          rows={10}
+          placeholder={'Planchuela;Planch\nTrefilado;Tref\nCañería;Cañ'}
+          className={cn(textareaBase, 'font-mono text-[13px]')}
+        />
       </FormSection>
 
-      {validCount > 0 && (
+      {validLines.length > 0 && (
         <div className="flex items-center gap-3 rounded-xl bg-[#2C6B2F]/8 px-5 py-3.5">
           <Tag size={14} className="shrink-0 text-[#2C6B2F]" />
           <p className="text-[14px] text-[#2C6B2F]">
-            Se crearán <strong>{validCount}</strong> {validCount === 1 ? 'ítem' : 'ítems'}
-            {rows.length > validCount && (
-              <span className="ml-1.5 text-[#6B7280]">
-                ({rows.length - validCount} {rows.length - validCount === 1 ? 'fila vacía ignorada' : 'filas vacías ignoradas'})
-              </span>
-            )}
+            Se crearán <strong>{validLines.length}</strong> {validLines.length === 1 ? 'ítem' : 'ítems'}
           </p>
         </div>
       )}
@@ -639,7 +582,7 @@ function BatchCreateForm({ typeId, typeLabel, onSave, onClose }: {
       <FormActions
         pending={m.isPending}
         isEdit={false}
-        label={`Crear ${validCount} ítem${validCount !== 1 ? 's' : ''}`}
+        label={`Importar ${validLines.length} ítem${validLines.length !== 1 ? 's' : ''}`}
         onClose={onClose}
       />
     </form>
@@ -655,12 +598,12 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
   })
   const m = useMutation({
     mutationFn: (d: { search: string; replacement: string }) =>
-      apiClient.patch(`/item-types/${typeId}/items/rename`, d),
+      apiClient.patch(`/item-classes/${typeId}/items/rename`, d),
     onSuccess: onSave,
   })
   return (
     <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
-      <ParentBadge label="Tipo" value={typeLabel} />
+      <ParentBadge label="Clase" value={typeLabel} />
       <FormField label="Buscar" required error={!!errors.search && 'Campo requerido'}>
         <input
           {...register('search', { required: true })}
@@ -681,33 +624,25 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
   )
 }
 
-// ─── Category form ────────────────────────────────────────────────────────────
-function CategoryForm({ item, onSave, onClose }: { item: Category | null; onSave: () => void; onClose: () => void }) {
+// ─── Segment form ─────────────────────────────────────────────────────────────
+function SegmentForm({ item, onSave, onClose }: { item: Segment | null; onSave: () => void; onClose: () => void }) {
   const qc = useQueryClient()
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
-      code: item?.code ?? '', name: item?.name ?? '',
-      abbreviation: item?.abbreviation ?? '', description: item?.description ?? '',
+      name: item?.name ?? '',
+      abbreviation: item?.abbreviation ?? '',
+      description: item?.description ?? '',
     },
   })
   const m = useMutation({
-    mutationFn: (d: object) => item ? apiClient.put(`/categories/${item.id}`, d) : apiClient.post('/categories', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['categories'] }); onSave() },
+    mutationFn: (d: object) => item ? apiClient.put(`/segments/${item.id}`, d) : apiClient.post('/segments', d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['segments'] }); onSave() },
   })
   return (
     <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
-      <div className="grid grid-cols-[100px_1fr] gap-5">
-        <FormField label="Código" required error={!!errors.code && 'Campo requerido'}>
-          <input
-            {...register('code', { required: true })} maxLength={1}
-            className={cn(inputBase, 'text-center text-[17px] font-bold uppercase tracking-widest font-mono', errors.code && inputError)}
-            placeholder="A"
-          />
-        </FormField>
-        <FormField label="Abreviatura" optional>
-          <input {...register('abbreviation')} maxLength={5} className={inputBase} placeholder="ACE" />
-        </FormField>
-      </div>
+      <FormField label="Abreviatura" optional>
+        <input {...register('abbreviation')} maxLength={5} className={inputBase} placeholder="ACE" />
+      </FormField>
       <FormField label="Nombre" required error={!!errors.name && 'Campo requerido'}>
         <input
           {...register('name', { required: true })}
@@ -716,44 +651,37 @@ function CategoryForm({ item, onSave, onClose }: { item: Category | null; onSave
         />
       </FormField>
       <FormField label="Descripción" optional>
-        <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción de la categoría..." />
+        <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción del segmento..." />
       </FormField>
       {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
-      <FormActions pending={m.isPending} isEdit={!!item} label="Crear categoría" onClose={onClose} />
+      <FormActions pending={m.isPending} isEdit={!!item} label="Crear segmento" onClose={onClose} />
     </form>
   )
 }
 
 // ─── Family form ──────────────────────────────────────────────────────────────
-function FamilyForm({ item, categoryId, categoryLabel, onSave, onClose }: {
-  item: Family | null; categoryId: number; categoryLabel: string; onSave: () => void; onClose: () => void
+function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
+  item: Family | null; segmentId: number; segmentLabel: string; onSave: () => void; onClose: () => void
 }) {
   const qc = useQueryClient()
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
-      code: item?.code ?? '', name: item?.name ?? '',
-      abbreviation: item?.abbreviation ?? '', description: item?.description ?? '', categoryId,
+      name: item?.name ?? '',
+      abbreviation: item?.abbreviation ?? '',
+      description: item?.description ?? '',
+      segmentId,
     },
   })
   const m = useMutation({
     mutationFn: (d: object) => item ? apiClient.put(`/families/${item.id}`, d) : apiClient.post('/families', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['families', categoryId] }); onSave() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['families', segmentId] }); onSave() },
   })
   return (
     <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
-      <ParentBadge label="Categoría" value={categoryLabel} />
-      <div className="grid grid-cols-[100px_1fr] gap-5">
-        <FormField label="Código" required error={!!errors.code && 'Campo requerido'}>
-          <input
-            {...register('code', { required: true })} maxLength={3}
-            className={cn(inputBase, 'text-center font-bold tracking-widest font-mono', errors.code && inputError)}
-            placeholder="001"
-          />
-        </FormField>
-        <FormField label="Abreviatura" optional>
-          <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA" />
-        </FormField>
-      </div>
+      <ParentBadge label="Segmento" value={segmentLabel} />
+      <FormField label="Abreviatura" optional>
+        <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA" />
+      </FormField>
       <FormField label="Nombre" required error={!!errors.name && 'Campo requerido'}>
         <input
           {...register('name', { required: true })}
@@ -770,36 +698,29 @@ function FamilyForm({ item, categoryId, categoryLabel, onSave, onClose }: {
   )
 }
 
-// ─── Type form ────────────────────────────────────────────────────────────────
-function TypeForm({ item, familyId, familyLabel, onSave, onClose }: {
-  item: ItemType | null; familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
+// ─── Item class form ──────────────────────────────────────────────────────────
+function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
+  item: ItemClass | null; familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
 }) {
   const qc = useQueryClient()
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
-      code: item?.code ?? '', name: item?.name ?? '',
-      abbreviation: item?.abbreviation ?? '', description: item?.description ?? '', familyId,
+      name: item?.name ?? '',
+      abbreviation: item?.abbreviation ?? '',
+      description: item?.description ?? '',
+      familyId,
     },
   })
   const m = useMutation({
-    mutationFn: (d: object) => item ? apiClient.put(`/item-types/${item.id}`, d) : apiClient.post('/item-types', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['types', familyId] }); onSave() },
+    mutationFn: (d: object) => item ? apiClient.put(`/item-classes/${item.id}`, d) : apiClient.post('/item-classes', d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['item-classes', familyId] }); onSave() },
   })
   return (
     <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
       <ParentBadge label="Familia" value={familyLabel} />
-      <div className="grid grid-cols-[100px_1fr] gap-5">
-        <FormField label="Código" required error={!!errors.code && 'Campo requerido'}>
-          <input
-            {...register('code', { required: true })} maxLength={3}
-            className={cn(inputBase, 'text-center font-bold tracking-widest font-mono', errors.code && inputError)}
-            placeholder="001"
-          />
-        </FormField>
-        <FormField label="Abreviatura" optional>
-          <input {...register('abbreviation')} className={inputBase} placeholder="PLA1-1/8" />
-        </FormField>
-      </div>
+      <FormField label="Abreviatura" optional>
+        <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
+      </FormField>
       <FormField label="Nombre / Especificación" required error={!!errors.name && 'Campo requerido'}
         helper='Ej: PLA SAE1010 1"x1/8"'>
         <input
@@ -809,10 +730,10 @@ function TypeForm({ item, familyId, familyLabel, onSave, onClose }: {
         />
       </FormField>
       <FormField label="Descripción" optional>
-        <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción del tipo..." />
+        <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción de la clase..." />
       </FormField>
       {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
-      <FormActions pending={m.isPending} isEdit={!!item} label="Crear tipo" onClose={onClose} />
+      <FormActions pending={m.isPending} isEdit={!!item} label="Crear clase" onClose={onClose} />
     </form>
   )
 }
@@ -821,12 +742,12 @@ function TypeForm({ item, familyId, familyLabel, onSave, onClose }: {
 
 const SEL_KEY = 'codificacion:selection'
 
-function readSavedSelection(): { selCat: Category | null; selFam: Family | null; selType: ItemType | null; selItem: ItemSummary | null } {
+function readSavedSelection(): { selSeg: Segment | null; selFam: Family | null; selClass: ItemClass | null; selItem: ItemSummary | null } {
   try {
     const raw = sessionStorage.getItem(SEL_KEY)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
-  return { selCat: null, selFam: null, selType: null, selItem: null }
+  return { selSeg: null, selFam: null, selClass: null, selItem: null }
 }
 
 export function CodificacionPage() {
@@ -834,47 +755,48 @@ export function CodificacionPage() {
   const qc       = useQueryClient()
 
   const saved = readSavedSelection()
-  const [selCat,  setSelCat]  = useState<Category | null>(saved.selCat)
-  const [selFam,  setSelFam]  = useState<Family | null>(saved.selFam)
-  const [selType, setSelType] = useState<ItemType | null>(saved.selType)
-  const [selItem, setSelItem] = useState<ItemSummary | null>(saved.selItem)
-  const [sheet,   setSheet]   = useState<SheetKind>(null)
+  const [selSeg,   setSelSeg]   = useState<Segment | null>(saved.selSeg)
+  const [selFam,   setSelFam]   = useState<Family | null>(saved.selFam)
+  const [selClass, setSelClass] = useState<ItemClass | null>(saved.selClass)
+  const [selItem,  setSelItem]  = useState<ItemSummary | null>(saved.selItem)
+  const [sheet,    setSheet]    = useState<SheetKind>(null)
 
   useEffect(() => {
-    sessionStorage.setItem(SEL_KEY, JSON.stringify({ selCat, selFam, selType, selItem }))
-  }, [selCat, selFam, selType, selItem])
-  const [editCat,  setEditCat]  = useState<Category | null>(null)
-  const [editFam,  setEditFam]  = useState<Family | null>(null)
-  const [editType, setEditType] = useState<ItemType | null>(null)
+    sessionStorage.setItem(SEL_KEY, JSON.stringify({ selSeg, selFam, selClass, selItem }))
+  }, [selSeg, selFam, selClass, selItem])
 
-  const [delTarget, setDelTarget] = useState<{ kind: 'category' | 'family' | 'type'; row: ColRow } | null>(null)
+  const [editSeg,   setEditSeg]   = useState<Segment | null>(null)
+  const [editFam,   setEditFam]   = useState<Family | null>(null)
+  const [editClass, setEditClass] = useState<ItemClass | null>(null)
+
+  const [delTarget, setDelTarget] = useState<{ kind: 'segment' | 'family' | 'item-class'; row: ColRow } | null>(null)
   const [delApiErr, setDelApiErr] = useState<string | null>(null)
 
-  const { data: categories = [], isLoading: loadCats } = useQuery({
-    queryKey: ['categories'],
-    queryFn:  () => apiClient.get<Category[]>('/categories').then(r => r.data),
+  const { data: segments = [], isLoading: loadSegs } = useQuery({
+    queryKey: ['segments'],
+    queryFn:  () => apiClient.get<Segment[]>('/segments').then(r => r.data),
   })
   const { data: families = [], isLoading: loadFams } = useQuery({
-    queryKey: ['families', selCat?.id],
-    queryFn:  () => apiClient.get<Family[]>(`/categories/${selCat!.id}/families`).then(r => r.data),
-    enabled:  !!selCat,
+    queryKey: ['families', selSeg?.id],
+    queryFn:  () => apiClient.get<Family[]>(`/segments/${selSeg!.id}/families`).then(r => r.data),
+    enabled:  !!selSeg,
   })
-  const { data: types = [], isLoading: loadTypes } = useQuery({
-    queryKey: ['types', selFam?.id],
-    queryFn:  () => apiClient.get<ItemType[]>(`/families/${selFam!.id}/item-types`).then(r => r.data),
+  const { data: itemClasses = [], isLoading: loadClasses } = useQuery({
+    queryKey: ['item-classes', selFam?.id],
+    queryFn:  () => apiClient.get<ItemClass[]>(`/families/${selFam!.id}/item-classes`).then(r => r.data),
     enabled:  !!selFam,
   })
   const { data: items = [], isLoading: loadItems } = useQuery({
-    queryKey: ['items', selType?.id],
-    queryFn:  () => apiClient.get<ItemSummary[]>(`/item-types/${selType!.id}/items`).then(r => r.data),
-    enabled:  !!selType,
+    queryKey: ['items', selClass?.id],
+    queryFn:  () => apiClient.get<ItemSummary[]>(`/item-classes/${selClass!.id}/items`).then(r => r.data),
+    enabled:  !!selClass,
   })
 
-  const deleteCatMut = useMutation({
-    mutationFn: (id: number) => apiClient.delete(`/categories/${id}`),
+  const deleteSegMut = useMutation({
+    mutationFn: (id: number) => apiClient.delete(`/segments/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['categories'] })
-      if (selCat?.id === delTarget?.row.id) { setSelCat(null); setSelFam(null); setSelType(null); setSelItem(null) }
+      qc.invalidateQueries({ queryKey: ['segments'] })
+      if (selSeg?.id === delTarget?.row.id) { setSelSeg(null); setSelFam(null); setSelClass(null); setSelItem(null) }
       setDelTarget(null); setDelApiErr(null)
     },
     onError: err => setDelApiErr(getErrMsg(err)),
@@ -882,62 +804,61 @@ export function CodificacionPage() {
   const deleteFamMut = useMutation({
     mutationFn: (id: number) => apiClient.delete(`/families/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['families', selCat?.id] })
-      if (selFam?.id === delTarget?.row.id) { setSelFam(null); setSelType(null); setSelItem(null) }
+      qc.invalidateQueries({ queryKey: ['families', selSeg?.id] })
+      if (selFam?.id === delTarget?.row.id) { setSelFam(null); setSelClass(null); setSelItem(null) }
       setDelTarget(null); setDelApiErr(null)
     },
     onError: err => setDelApiErr(getErrMsg(err)),
   })
-  const deleteTypeMut = useMutation({
-    mutationFn: (id: number) => apiClient.delete(`/item-types/${id}`),
+  const deleteClassMut = useMutation({
+    mutationFn: (id: number) => apiClient.delete(`/item-classes/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['types', selFam?.id] })
-      if (selType?.id === delTarget?.row.id) { setSelType(null); setSelItem(null) }
+      qc.invalidateQueries({ queryKey: ['item-classes', selFam?.id] })
+      if (selClass?.id === delTarget?.row.id) { setSelClass(null); setSelItem(null) }
       setDelTarget(null); setDelApiErr(null)
     },
     onError: err => setDelApiErr(getErrMsg(err)),
   })
 
-  const delPending = deleteCatMut.isPending || deleteFamMut.isPending || deleteTypeMut.isPending
+  const delPending = deleteSegMut.isPending || deleteFamMut.isPending || deleteClassMut.isPending
 
   const handleDeleteConfirm = () => {
     if (!delTarget) return
     setDelApiErr(null)
-    if (delTarget.kind === 'category') deleteCatMut.mutate(delTarget.row.id)
+    if (delTarget.kind === 'segment')    deleteSegMut.mutate(delTarget.row.id)
     else if (delTarget.kind === 'family') deleteFamMut.mutate(delTarget.row.id)
-    else deleteTypeMut.mutate(delTarget.row.id)
+    else deleteClassMut.mutate(delTarget.row.id)
   }
 
   const crumbs = [
     'Codificacion',
-    selCat  && `${selCat.code} — ${selCat.name}`,
-    selFam  && `${selFam.code} — ${selFam.name}`,
-    selType && `${selType.code} — ${selType.name}`,
+    selSeg   && `${selSeg.code} — ${selSeg.name}`,
+    selFam   && `${selFam.code} — ${selFam.name}`,
+    selClass && `${selClass.code} — ${selClass.name}`,
   ].filter(Boolean) as string[]
 
   const openNew  = (kind: SheetKind) => {
-    if (kind === 'category') setEditCat(null)
-    if (kind === 'family')   setEditFam(null)
-    if (kind === 'type')     setEditType(null)
+    if (kind === 'segment')    setEditSeg(null)
+    if (kind === 'family')     setEditFam(null)
+    if (kind === 'item-class') setEditClass(null)
     setSheet(kind)
   }
-  const openEdit = (kind: SheetKind, row: Category | Family | ItemType) => {
-    if (kind === 'category') setEditCat(row as Category)
-    if (kind === 'family')   setEditFam(row as Family)
-    if (kind === 'type')     setEditType(row as ItemType)
+  const openEdit = (kind: SheetKind, row: Segment | Family | ItemClass) => {
+    if (kind === 'segment')    setEditSeg(row as Segment)
+    if (kind === 'family')     setEditFam(row as Family)
+    if (kind === 'item-class') setEditClass(row as ItemClass)
     setSheet(kind)
   }
 
   const DEL_TITLES: Record<string, string> = {
-    category: 'Eliminar categoría',
-    family:   'Eliminar familia',
-    type:     'Eliminar tipo',
+    segment:    'Eliminar segmento',
+    family:     'Eliminar familia',
+    'item-class': 'Eliminar clase',
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#f7f8fa]">
 
-      {/* Topbar */}
       <header className="relative flex h-12 shrink-0 items-center border-b border-gray-200 bg-white px-6">
         <span className="absolute inset-x-0 top-0 h-[3px] bg-[#2C6B2F]" />
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -960,7 +881,6 @@ export function CodificacionPage() {
         </div>
       </header>
 
-      {/* Page heading */}
       <div className="flex shrink-0 items-center gap-4 px-6 py-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2C6B2F]/10">
           <Layers size={20} className="text-[#2C6B2F]" />
@@ -971,28 +891,27 @@ export function CodificacionPage() {
         </div>
       </div>
 
-      {/* Column panel */}
       <div className="mx-6 mb-6 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex h-full w-full">
 
           <CatalogColumn
-            title="Categorias" icon={LayoutGrid} rows={categories} selected={selCat}
-            isLoading={loadCats} enabled={true} placeholderText=""
+            title="Segmentos" icon={LayoutGrid} rows={segments} selected={selSeg}
+            isLoading={loadSegs} enabled={true} placeholderText=""
             onSelect={row => {
-              const cat = categories.find(c => c.id === row.id)!
-              setSelCat(cat); setSelFam(null); setSelType(null); setSelItem(null)
+              const seg = segments.find(s => s.id === row.id)!
+              setSelSeg(seg); setSelFam(null); setSelClass(null); setSelItem(null)
             }}
-            onNew={() => openNew('category')}
-            onEdit={row => openEdit('category', categories.find(c => c.id === row.id)!)}
-            onDelete={row => { setDelTarget({ kind: 'category', row }); setDelApiErr(null) }}
+            onNew={() => openNew('segment')}
+            onEdit={row => openEdit('segment', segments.find(s => s.id === row.id)!)}
+            onDelete={row => { setDelTarget({ kind: 'segment', row }); setDelApiErr(null) }}
           />
 
           <CatalogColumn
             title="Familias" icon={FolderOpen} rows={families} selected={selFam}
-            isLoading={loadFams} enabled={!!selCat} placeholderText="Seleccioná una categoría"
+            isLoading={loadFams} enabled={!!selSeg} placeholderText="Seleccioná un segmento"
             onSelect={row => {
               const fam = families.find(f => f.id === row.id)!
-              setSelFam(fam); setSelType(null); setSelItem(null)
+              setSelFam(fam); setSelClass(null); setSelItem(null)
             }}
             onNew={() => openNew('family')}
             onEdit={row => openEdit('family', families.find(f => f.id === row.id)!)}
@@ -1000,19 +919,19 @@ export function CodificacionPage() {
           />
 
           <CatalogColumn
-            title="Tipos" icon={Package} rows={types} selected={selType}
-            isLoading={loadTypes} enabled={!!selFam} placeholderText="Seleccioná una familia"
+            title="Clases" icon={Package} rows={itemClasses} selected={selClass}
+            isLoading={loadClasses} enabled={!!selFam} placeholderText="Seleccioná una familia"
             onSelect={row => {
-              const type = types.find(t => t.id === row.id)!
-              setSelType(type); setSelItem(null)
+              const cls = itemClasses.find(t => t.id === row.id)!
+              setSelClass(cls); setSelItem(null)
             }}
-            onNew={() => openNew('type')}
-            onEdit={row => openEdit('type', types.find(t => t.id === row.id)!)}
-            onDelete={row => { setDelTarget({ kind: 'type', row }); setDelApiErr(null) }}
+            onNew={() => openNew('item-class')}
+            onEdit={row => openEdit('item-class', itemClasses.find(t => t.id === row.id)!)}
+            onDelete={row => { setDelTarget({ kind: 'item-class', row }); setDelApiErr(null) }}
           />
 
           <ItemsColumn
-            rows={items} selected={selItem} isLoading={loadItems} enabled={!!selType}
+            rows={items} selected={selItem} isLoading={loadItems} enabled={!!selClass}
             onSelect={setSelItem}
             onNavigate={row => navigate({ to: `/app/catalog/items/${row.id}` })}
             onNew={() => setSheet('item')}
@@ -1021,9 +940,9 @@ export function CodificacionPage() {
           />
 
           <ContextPanel
-            selCat={selCat}
+            selSeg={selSeg}
             selFam={selFam}
-            selType={selType}
+            selClass={selClass}
             selItem={selItem}
             onNavigate={row => navigate({ to: `/app/catalog/items/${row.id}` })}
           />
@@ -1031,8 +950,8 @@ export function CodificacionPage() {
       </div>
 
       {/* Modals */}
-      <FormDialog open={sheet === 'category'} title={editCat ? 'Modificar Categoría' : 'Nueva Categoría'} onClose={() => setSheet(null)}>
-        <CategoryForm item={editCat} onSave={() => setSheet(null)} onClose={() => setSheet(null)} />
+      <FormDialog open={sheet === 'segment'} title={editSeg ? 'Modificar Segmento' : 'Nuevo Segmento'} onClose={() => setSheet(null)}>
+        <SegmentForm item={editSeg} onSave={() => setSheet(null)} onClose={() => setSheet(null)} />
       </FormDialog>
 
       <FormDialog
@@ -1040,33 +959,33 @@ export function CodificacionPage() {
         title={editFam ? 'Modificar Familia' : 'Nueva Familia'}
         onClose={() => setSheet(null)}
       >
-        {selCat && (
+        {selSeg && (
           <FamilyForm
-            item={editFam} categoryId={selCat.id}
-            categoryLabel={`${selCat.code} — ${selCat.name}`}
+            item={editFam} segmentId={selSeg.id}
+            segmentLabel={`${selSeg.code} — ${selSeg.name}`}
             onSave={() => setSheet(null)} onClose={() => setSheet(null)}
           />
         )}
       </FormDialog>
 
       <FormDialog
-        open={sheet === 'type'}
-        title={editType ? 'Modificar Tipo' : 'Nuevo Tipo'}
+        open={sheet === 'item-class'}
+        title={editClass ? 'Modificar Clase' : 'Nueva Clase'}
         onClose={() => setSheet(null)}
       >
         {selFam && (
-          <TypeForm
-            item={editType} familyId={selFam.id}
+          <ItemClassForm
+            item={editClass} familyId={selFam.id}
             familyLabel={`${selFam.code} — ${selFam.name}`}
             onSave={() => setSheet(null)} onClose={() => setSheet(null)}
           />
         )}
       </FormDialog>
 
-      {selType && (
+      {selClass && (
         <NewItemForm
           open={sheet === 'item'}
-          itemType={selType}
+          itemType={selClass}
           onSave={(_item: ItemDetail) => setSheet(null)}
           onClose={() => setSheet(null)}
         />
@@ -1074,15 +993,15 @@ export function CodificacionPage() {
 
       <FormDialog
         open={sheet === 'batch'}
-        title="Crear múltiples ítems"
-        subtitle={selType ? `${selType.code} — ${selType.name}` : undefined}
-        width="w-[700px]"
+        title="Importar ítems desde texto"
+        subtitle={selClass ? `${selClass.code} — ${selClass.name}` : undefined}
+        width="w-[600px]"
         onClose={() => setSheet(null)}
       >
-        {selType && (
-          <BatchCreateForm
-            typeId={selType.id}
-            typeLabel={`${selType.code} — ${selType.name}`}
+        {selClass && (
+          <BatchImportForm
+            typeId={selClass.id}
+            typeLabel={`${selClass.code} — ${selClass.name}`}
             onSave={() => setSheet(null)}
             onClose={() => setSheet(null)}
           />
@@ -1094,12 +1013,12 @@ export function CodificacionPage() {
         title="Renombrar ítems en lote"
         onClose={() => setSheet(null)}
       >
-        {selType && (
+        {selClass && (
           <RenameForm
-            typeId={selType.id}
-            typeLabel={`${selType.code} — ${selType.name}`}
+            typeId={selClass.id}
+            typeLabel={`${selClass.code} — ${selClass.name}`}
             onSave={() => {
-              qc.invalidateQueries({ queryKey: ['items', selType.id] })
+              qc.invalidateQueries({ queryKey: ['items', selClass.id] })
               setSheet(null)
             }}
             onClose={() => setSheet(null)}

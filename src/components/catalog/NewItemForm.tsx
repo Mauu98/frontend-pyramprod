@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
-import type { ItemType, ItemDetail, ItemSummary, DimensionUnit } from '@/types/api.types'
+import type { ItemClass, ItemDetail, ItemSummary, WeightMethod } from '@/types/api.types'
 import { Search, Weight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -12,7 +12,7 @@ import {
 import { FormDialog } from '@/components/ui/form-dialog'
 
 // ─── Weight calculation ───────────────────────────────────────────────────────
-function calcWeight(unit: DimensionUnit, sw: number, nd: number, d1: number, d2: number, d3: number): number {
+function calcWeight(unit: WeightMethod, sw: number, nd: number, d1: number, d2: number, d3: number): number {
   const f = (sw * nd) / 1_000_000_000
   switch (unit) {
     case 'Mm.':     return f * d1 * d2
@@ -24,7 +24,7 @@ function calcWeight(unit: DimensionUnit, sw: number, nd: number, d1: number, d2:
 }
 
 // ─── Name auto-composer ───────────────────────────────────────────────────────
-function composeName(matName: string, d1: number, d2: number, d3: number, unit: DimensionUnit | null, opName: string, complement: string, fn: string): string {
+function composeName(matName: string, d1: number, d2: number, d3: number, unit: WeightMethod | null, opName: string, complement: string, fn: string): string {
   const dim = !unit ? '' : unit === 'Mm.' ? `${d1}x${d2}` : unit === 'Mm3.' ? `${d1}x${d2}x${d3}` : `${d1}`
   return [matName, dim, opName, complement ? `[${complement}]` : '', fn].filter(Boolean).join(' ').slice(0, 145)
 }
@@ -76,7 +76,7 @@ function MaterialPicker({ value, onChange }: { value: string; onChange: (code: s
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 export function NewItemForm({ open, itemType, onSave, onClose }: {
-  open: boolean; itemType: ItemType; onSave: (item: ItemDetail) => void; onClose: () => void
+  open: boolean; itemType: ItemClass; onSave: (item: ItemDetail) => void; onClose: () => void
 }) {
   const qc = useQueryClient()
   const { register, handleSubmit, control, formState: { errors } } = useForm<FormValues>({
@@ -89,7 +89,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
   const d1 = parseFloat(watched.d1 || '0') || 0
   const d2 = parseFloat(watched.d2 || '0') || 0
   const d3 = parseFloat(watched.d3 || '0') || 0
-  const unit = itemType.unitOfMeasure
+  const unit = itemType.weightMethod
 
   const weight = useMemo(() => {
     if (!unit || !itemType.specificWeight || !itemType.nominalDimension) return null
@@ -108,7 +108,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
 
   const needD2 = unit === 'Mm.' || unit === 'Mm3.'
   const needD3 = unit === 'Mm3.'
-  const d1Label: Record<DimensionUnit, string> = {
+  const d1Label: Record<WeightMethod, string> = {
     'Mm.': 'Largo (mm)', 'Mm2.': 'Área (mm²)', 'Mm3.': 'Largo (mm)',
     'Kg./Und': 'Peso/pieza (kg)', 'Und/Kg.': 'Piezas/kg',
   }
