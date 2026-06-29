@@ -122,7 +122,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
     if (requiresMaterial && !matCode) return
     m.mutate({
       typeId:              itemType.id,
-      fullName:            previewName || v.func,
+      // fullName is composed server-side — not sent from client
       functionName:        v.func || null,
       material:            requiresMaterial ? (matCode || null) : null,
       materialDevelopment: d1 || null,
