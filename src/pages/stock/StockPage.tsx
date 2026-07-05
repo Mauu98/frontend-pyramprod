@@ -896,6 +896,9 @@ function MovimientosTab({ itemId }: { itemId: number }) {
     qc.invalidateQueries({ queryKey: ['stock-movements', itemId] })
     qc.invalidateQueries({ queryKey: ['stock-levels'] })
     qc.invalidateQueries({ queryKey: ['stock-level', itemId] })
+    // Codificación's item ficha caches stock fields under a separate query key —
+    // without this, posting a movement here leaves that page showing stale values.
+    qc.invalidateQueries({ queryKey: ['item-detail', itemId] })
   }
 
   return (
@@ -1812,12 +1815,13 @@ export function StockPage() {
   })
 
   // A batch can touch several distinct items at once, so invalidation is broadened
-  // to the whole ['stock-movements'] / ['stock-levels'] / ['stock-level'] prefixes
-  // instead of a single itemId, mirroring MovimientosTab.handleSuccess.
+  // to the whole ['stock-movements'] / ['stock-levels'] / ['stock-level'] / ['item-detail']
+  // prefixes instead of a single itemId, mirroring MovimientosTab.handleSuccess.
   function handleBatchSuccess() {
     qc.invalidateQueries({ queryKey: ['stock-movements'] })
     qc.invalidateQueries({ queryKey: ['stock-levels'] })
     qc.invalidateQueries({ queryKey: ['stock-level'] })
+    qc.invalidateQueries({ queryKey: ['item-detail'] })
   }
 
   return (

@@ -960,6 +960,11 @@ function ManualStockLoadDialog({ order, onClose, onDone }: {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      // This posts real stock movements (changes Item.stockAvailable/stockFuture), so the
+      // Stock module's own views and the catalog ficha's cached item detail go stale too.
+      qc.invalidateQueries({ queryKey: ['stock-levels'] })
+      qc.invalidateQueries({ queryKey: ['stock-level'] })
+      qc.invalidateQueries({ queryKey: ['item-detail'] })
       onDone()
       onClose()
     },
