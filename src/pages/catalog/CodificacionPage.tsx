@@ -97,19 +97,11 @@ function ContextPanel({
                 </p>
                 <p className="truncate text-[16px] font-bold text-[#111827]">{selItem.fullName}</p>
               </div>
-              <div className={cn(
-                'ml-auto shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide',
-                selItem.active
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-slate-100 text-slate-400',
-              )}>
-                {selItem.active ? 'Activo' : 'Inactivo'}
-              </div>
             </div>
           </div>
           <div className="p-5">
             <div className="grid grid-cols-2 gap-3">
-              <StatTile label="Stock" value={(selItem.stock ?? 0).toFixed(2)} sub={selItem.unitOfMeasure ?? undefined} />
+              <StatTile label="Stock" value={(selItem.stockAvailable ?? 0).toFixed(2)} sub={selItem.unitOfMeasure ?? undefined} />
               <StatTile label="Mínimo" value={(selItem.stockMin ?? 0).toFixed(2)} sub={selItem.unitOfMeasure ?? undefined} />
             </div>
           </div>
@@ -528,7 +520,7 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
                 {row.fullName}
               </span>
               <div className="flex shrink-0 flex-col items-end gap-0.5">
-                <span className="font-mono text-[12px] font-semibold text-slate-500">{(row.stock ?? 0).toFixed(2)}</span>
+                <span className="font-mono text-[12px] font-semibold text-slate-500">{(row.stockAvailable ?? 0).toFixed(2)}</span>
                 {row.unitOfMeasure && <span className="text-[11px] text-slate-400">{row.unitOfMeasure}</span>}
               </div>
               <button

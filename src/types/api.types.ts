@@ -56,9 +56,8 @@ export interface ItemSummary {
   fullCode: string
   fullName: string
   unitOfMeasure: string | null
-  stock: number
+  stockAvailable: number
   stockMin: number
-  active: boolean
 }
 
 export interface ItemDetail {
