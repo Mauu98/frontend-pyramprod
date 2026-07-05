@@ -171,6 +171,8 @@ export type StockMovementType =
   | 'EXIT_CONSIGNMENT_STOCK'
   | 'EXIT_SAFETY_ADJUSTMENT'
 
+export type StockExitDestination = 'SALES' | 'STOCK'
+
 export interface StockMovementRequest {
   itemId: number
   entry: boolean
@@ -183,6 +185,26 @@ export interface StockMovementRequest {
   movementDate: string
   actorName?: string
   unitOfMeasure?: string
+  exitDestination?: StockExitDestination
+}
+
+export interface StockMovementBatchLine {
+  itemId: number
+  amount: number
+  unitOfMeasure?: string
+}
+
+export interface StockMovementBatchRequest {
+  entry: boolean
+  stockVariable: StockVariable
+  movementType: StockMovementType
+  relatedDocument?: string
+  memo?: string
+  movementDate: string
+  actorName?: string
+  applyRules: boolean
+  exitDestination?: StockExitDestination
+  lines: StockMovementBatchLine[]
 }
 
 export interface StockMovementResponse {
@@ -699,4 +721,27 @@ export interface ReservationStatusResponse {
   fullyReservedLines: number
   coveragePercent: number
   lines: SalesOrderLineResponse[]
+}
+
+export interface SalesOrderStockCrossReferenceLine {
+  itemId: number
+  amount: number
+  unitOfMeasure?: string
+}
+
+export interface SalesOrderStockCrossReferenceRequest {
+  movementType: StockMovementType
+  targetVariable: StockVariable
+  memo?: string
+  lines: SalesOrderStockCrossReferenceLine[]
+}
+
+export interface SalesOrderStockTransferRequest {
+  targetOrderIds: number[]
+}
+
+export interface StockTransferCandidateResponse {
+  orderId: number
+  orderNumber: number
+  gap: number
 }

@@ -13,6 +13,11 @@ import type {
   PageResponse,
   SalesOrderResponse,
   SalesOrderStatus,
+  SalesOrderStockCrossReferenceRequest,
+  StockMovementResponse,
+  SalesOrderLineResponse,
+  SalesOrderStockTransferRequest,
+  StockTransferCandidateResponse,
 } from '@/types/api.types'
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -898,12 +903,296 @@ function NewSalesOrderDialog({ open, onClose, onCreated }: { open: boolean; onCl
   )
 }
 
+// ─── Manual stock cross-reference (mirrors Python's Ingre_Stk, ingrestk_nv.py) ────
+
+const CROSS_REF_MOVEMENT_TYPES: { value: string; label: string }[] = [
+  { value: 'ENTRY_INVENTORY', label: 'Inventario' },
+  { value: 'ENTRY_REMIT_FROM_THIRD', label: 'Remito de 3ros.' },
+  { value: 'ENTRY_DELIVERY_NOTE_FROM_THIRD', label: 'Nota Entrega de 3ros.' },
+  { value: 'ENTRY_UNPLANNED_STOCK', label: 'Stock No Planificado' },
+  { value: 'ENTRY_UNEXPECTED_APPEARANCE', label: 'Aparición Imprevista' },
+]
+
+interface CrossRefLineState {
+  itemId: number
+  itemCode: string
+  itemName: string
+  include: boolean
+  amount: string
+}
+
+/**
+ * Lets the user post stock entries for items already on this order, without needing to
+ * search/paste codes — the order's own lines are the only selectable source, so there's no
+ * need to re-validate "does this code belong to the order" the way Python's Ingre_Stk did by
+ * checking substring membership against pasted text (ingrestk_nv.py:157-160); the backend
+ * still re-validates server-side regardless of what this UI restricts to.
+ */
+function ManualStockLoadDialog({ order, onClose, onDone }: {
+  order: SalesOrderResponse | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [movementType, setMovementType] = useState('ENTRY_INVENTORY')
+  const [targetVariable, setTargetVariable] = useState<'AVAILABLE' | 'FUTURE'>('AVAILABLE')
+  const [memo, setMemo] = useState('')
+  // Lazy-initialized from `order` — the parent remounts this component (via `key`) each time
+  // a different order opens, so this only ever runs once per order, no effect needed.
+  const [lines, setLines] = useState<CrossRefLineState[]>(() =>
+    (order?.lines ?? []).map(l => ({
+      itemId: l.itemId, itemCode: l.itemCode, itemName: l.itemName, include: false, amount: '',
+    })),
+  )
+  const [error, setError] = useState<string | null>(null)
+  const qc = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const body: SalesOrderStockCrossReferenceRequest = {
+        movementType: movementType as SalesOrderStockCrossReferenceRequest['movementType'],
+        targetVariable,
+        memo: memo || undefined,
+        lines: lines
+          .filter(l => l.include)
+          .map(l => ({ itemId: l.itemId, amount: parseFloat(l.amount) })),
+      }
+      return apiClient.post<StockMovementResponse[]>(`/sales/orders/${order!.id}/stock-cross-reference`, body)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      onDone()
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setError(msg ?? 'No se pudo cargar el stock manualmente.')
+    },
+  })
+
+  function toggleLine(itemId: number) {
+    setLines(prev => prev.map(l => l.itemId === itemId ? { ...l, include: !l.include } : l))
+  }
+
+  function updateAmount(itemId: number, val: string) {
+    setLines(prev => prev.map(l => l.itemId === itemId ? { ...l, amount: val } : l))
+  }
+
+  function handleSubmit() {
+    setError(null)
+    const selected = lines.filter(l => l.include)
+    if (selected.length === 0) {
+      setError('Seleccioná al menos un ítem de la nota de venta.')
+      return
+    }
+    if (selected.some(l => !l.amount || parseFloat(l.amount) <= 0)) {
+      setError('Todas las cantidades seleccionadas deben ser mayores a 0.')
+      return
+    }
+    mutation.mutate()
+  }
+
+  if (!order) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="relative w-[560px] max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
+          <div>
+            <p className="text-[14px] font-semibold text-[#111827]">Carga manual de stock — NV #{order.orderNumber}</p>
+            <p className="text-[12px] text-slate-400">Solo se pueden cargar ítems que ya pertenecen a esta nota de venta</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-1.5 text-slate-400 hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        <div className="flex flex-col gap-4 px-6 py-5">
+          <div className="flex gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Tipo de ingreso</label>
+              <select value={movementType} onChange={e => setMovementType(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-3 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white">
+                {CROSS_REF_MOVEMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Destino</label>
+              <select value={targetVariable} onChange={e => setTargetVariable(e.target.value as 'AVAILABLE' | 'FUTURE')}
+                className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-3 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white">
+                <option value="AVAILABLE">Disponible</option>
+                <option value="FUTURE">Futuro</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Ítems de la nota de venta</label>
+            {lines.map(l => (
+              <div key={l.itemId} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-[#f7f8fa] p-3">
+                <input type="checkbox" checked={l.include} onChange={() => toggleLine(l.itemId)}
+                  className="h-4 w-4 rounded accent-[#fbbf24]" />
+                <div className="min-w-0 flex-1">
+                  <span className="font-mono text-[11px] text-slate-400">{l.itemCode}</span>
+                  <span className="ml-2 text-[13px] text-slate-700">{l.itemName}</span>
+                </div>
+                <input type="number" step="0.001" min="0.001" value={l.amount}
+                  onChange={e => updateAmount(l.itemId, e.target.value)}
+                  disabled={!l.include}
+                  placeholder="Cant."
+                  className="w-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-[#fbbf24] disabled:opacity-40" />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">Memo</label>
+            <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2}
+              className="rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-2.5 text-[14px] outline-none focus:border-[#fbbf24] focus:bg-white" />
+          </div>
+
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-600">{error}</div>}
+        </div>
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-gray-100 bg-white px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-500">Cancelar</button>
+          <button type="button" onClick={handleSubmit} disabled={mutation.isPending}
+            className="flex items-center gap-2 rounded-xl bg-[#fbbf24] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#f59e0b] disabled:opacity-50">
+            {mutation.isPending ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Cargando...</> : 'Cargar stock'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Reserved stock transfer between orders (mirrors Python's TransfiNv) ──────
+
+/**
+ * Lets the user redistribute one line's reserved stock to other orders still waiting on the
+ * same item. Unlike Python's sele_transfi_stk.py — whose confirmation dialog warns that an
+ * over-requested transfer will be capped in list order, but whose code then transfers the full
+ * amount to every checked destination anyway — this always caps each destination at
+ * min(remaining, its own gap), server-side, so the warning shown here is actually true.
+ */
+function TransferStockDialog({ order, line, onClose, onDone }: {
+  order: SalesOrderResponse | null
+  line: SalesOrderLineResponse | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  const qc = useQueryClient()
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+
+  const { data: candidates = [], isLoading } = useQuery<StockTransferCandidateResponse[]>({
+    queryKey: ['transfer-candidates', order?.id, line?.itemId],
+    queryFn: () =>
+      apiClient.get<StockTransferCandidateResponse[]>(
+        `/sales/orders/${order!.id}/items/${line!.itemId}/transfer-candidates`,
+      ).then(r => r.data),
+    enabled: !!order && !!line,
+  })
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const body: SalesOrderStockTransferRequest = { targetOrderIds: Array.from(checkedIds) }
+      return apiClient.post(`/sales/orders/${order!.id}/items/${line!.itemId}/transfer-reserved-stock`, body)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      onDone()
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setError(msg ?? 'No se pudo transferir el stock reservado.')
+    },
+  })
+
+  function toggle(orderId: number) {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }
+
+  function handleSubmit() {
+    setError(null)
+    if (checkedIds.size === 0) {
+      setError('Seleccioná al menos una nota de venta destino.')
+      return
+    }
+    mutation.mutate()
+  }
+
+  if (!order || !line) return null
+
+  const requestedTotal = candidates
+    .filter(c => checkedIds.has(c.orderId))
+    .reduce((sum, c) => sum + c.gap, 0)
+  const overCommitted = requestedTotal > line.quantityReserved
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="relative w-[480px] max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
+          <div>
+            <p className="text-[14px] font-semibold text-[#111827]">
+              Transferir {line.quantityReserved} und. reservadas — {line.itemCode}
+            </p>
+            <p className="text-[12px] text-slate-400">Desde NV #{order.orderNumber}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-1.5 text-slate-400 hover:bg-gray-100"><X size={16} /></button>
+        </div>
+
+        <div className="flex flex-col gap-3 px-6 py-5">
+          {isLoading ? (
+            <div className="flex h-24 items-center justify-center"><Spinner /></div>
+          ) : candidates.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-slate-300">
+              No hay otras notas de venta esperando este ítem.
+            </p>
+          ) : (
+            candidates.map(c => (
+              <label key={c.orderId}
+                className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-100 bg-[#f7f8fa] px-4 py-3">
+                <input type="checkbox" checked={checkedIds.has(c.orderId)} onChange={() => toggle(c.orderId)}
+                  className="h-4 w-4 rounded accent-[#fbbf24]" />
+                <span className="flex-1 text-[13px] text-slate-700">NV #{c.orderNumber}</span>
+                <span className="font-mono text-[13px] font-semibold text-slate-500">necesita {c.gap.toFixed(2)}</span>
+              </label>
+            ))
+          )}
+
+          {overCommitted && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-700">
+              Lo pedido por las NV tildadas ({requestedTotal.toFixed(2)}) supera el stock reservado disponible
+              ({line.quantityReserved.toFixed(2)}). Se va a asignar en el orden de la lista hasta agotar la cantidad
+              — las últimas pueden recibir menos de lo que necesitan.
+            </div>
+          )}
+
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-600">{error}</div>}
+        </div>
+
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-gray-100 bg-white px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-500">Cancelar</button>
+          <button type="button" onClick={handleSubmit} disabled={mutation.isPending || candidates.length === 0}
+            className="flex items-center gap-2 rounded-xl bg-[#fbbf24] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#f59e0b] disabled:opacity-50">
+            {mutation.isPending ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Transfiriendo...</> : 'Transferir Stock'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Sales Orders Tab ─────────────────────────────────────────────────────────
 
 function SalesOrdersTab() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [showNewDialog, setShowNewDialog] = useState(false)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [manualLoadOrder, setManualLoadOrder] = useState<SalesOrderResponse | null>(null)
+  const [transferTarget, setTransferTarget] = useState<{ order: SalesOrderResponse; line: SalesOrderLineResponse } | null>(null)
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery<{ content: SalesOrderResponse[] }>({
@@ -991,6 +1280,12 @@ function SalesOrdersTab() {
                           </button>
                         )}
                         {o.status !== 'CANCELLED' && (
+                          <button onClick={() => setManualLoadOrder(o)}
+                            className="rounded-lg bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-100">
+                            Carga manual
+                          </button>
+                        )}
+                        {o.status !== 'CANCELLED' && (
                           <button onClick={() => cancelMutation.mutate(o.id)}
                             className="rounded-lg bg-red-50 px-3 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-100">
                             Cancelar
@@ -1011,6 +1306,7 @@ function SalesOrdersTab() {
                                 <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Reservado</th>
                                 <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Pendiente</th>
                                 <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Precio</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400" />
                               </tr>
                             </thead>
                             <tbody>
@@ -1024,6 +1320,16 @@ function SalesOrdersTab() {
                                   <td className="px-3 py-2 text-right text-emerald-600">{l.quantityReserved}</td>
                                   <td className="px-3 py-2 text-right text-amber-600">{l.quantityPending}</td>
                                   <td className="px-3 py-2 text-right font-mono text-slate-600">{Number(l.unitPrice).toFixed(4)}</td>
+                                  <td className="px-3 py-2 text-right">
+                                    {l.quantityReserved > 0 && (
+                                      <button
+                                        onClick={() => setTransferTarget({ order: o, line: l })}
+                                        className="rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-100"
+                                      >
+                                        Transferir
+                                      </button>
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1045,6 +1351,19 @@ function SalesOrdersTab() {
       )}
 
       <NewSalesOrderDialog open={showNewDialog} onClose={() => setShowNewDialog(false)} onCreated={() => {}} />
+      <ManualStockLoadDialog
+        key={manualLoadOrder?.id ?? 'closed'}
+        order={manualLoadOrder}
+        onClose={() => setManualLoadOrder(null)}
+        onDone={() => {}}
+      />
+      <TransferStockDialog
+        key={transferTarget ? `${transferTarget.order.id}-${transferTarget.line.itemId}` : 'closed'}
+        order={transferTarget?.order ?? null}
+        line={transferTarget?.line ?? null}
+        onClose={() => setTransferTarget(null)}
+        onDone={() => {}}
+      />
     </div>
   )
 }

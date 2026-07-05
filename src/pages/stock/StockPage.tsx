@@ -1,19 +1,22 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import {
   Search, Warehouse, Package, TrendingUp, TrendingDown,
   AlertTriangle, ArrowDownCircle, ArrowUpCircle, ChevronLeft, ChevronRight,
-  FileSpreadsheet, X,
+  FileSpreadsheet, X, Layers, Plus, Trash2, QrCode, Download,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import QRCode from 'qrcode'
 import { apiClient } from '@/lib/api-client'
+import { purchasingService } from '@/services/purchasing.service'
+import { salesService } from '@/services/sales.service'
 import { cn } from '@/lib/utils'
 import { FormField, ErrorBanner } from '@/components/ui/form-field'
 import { inputBase, inputError, textareaBase } from '@/components/ui/form-field'
 import type {
   StockLevel, StockMovementRequest, StockMovementResponse, StockPage,
-  StockVariable, StockMovementType,
+  StockVariable, StockMovementType, StockMovementBatchRequest, StockExitDestination,
 } from '@/types/api.types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -73,6 +76,17 @@ const EXIT_TYPES: StockMovementType[] = [
   'EXIT_QUALITY_REJECTION', 'EXIT_INVENTORY_ERROR', 'EXIT_LOANED_STOCK',
   'EXIT_CONSIGNMENT_STOCK', 'EXIT_SAFETY_ADJUSTMENT',
 ]
+
+// Exit variables whose applied-rules redirect needs an explicit Ventas/Stock destination
+// (lleva_stock_ok_2026.py:1320-1391 — cb_salestk combo).
+const EGRESS_REDIRECT_VARIABLES: StockVariable[] = [
+  'AVAILABLE', 'FUTURE', 'SHORTAGE_SALES', 'SHORTAGE_STOCK',
+]
+
+const EXIT_DESTINATION_LABELS: Record<StockExitDestination, string> = {
+  SALES: 'Ventas',
+  STOCK: 'Stock',
+}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -396,6 +410,115 @@ function NivelesTab({ level }: { level: StockLevel }) {
   )
 }
 
+// ─── Actor picker (proveedor / cliente / libre) ───────────────────────────────
+
+interface ActorOption {
+  key: string
+  category: 'Proveedor' | 'Cliente'
+  label: string
+}
+
+/**
+ * Free-text actor input assisted by a searchable proveedor/cliente picker, mirroring
+ * Python's check_prov/check_clien/check_pers + filtrar_items (lleva_stock_ok_2026.py:454-470).
+ * "Personal" has no backing entity in this backend yet (HR module not migrated), so it's not
+ * a searchable category here — typing a name directly still works for that case.
+ */
+function ActorField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [showProv, setShowProv] = useState(true)
+  const [showCli, setShowCli] = useState(true)
+  const [showDrop, setShowDrop] = useState(false)
+  const [results, setResults] = useState<ActorOption[]>([])
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    if (!showDrop) return
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      const calls: Promise<ActorOption[]>[] = []
+      if (showProv) {
+        calls.push(
+          purchasingService.listSuppliers({ search: value || undefined, size: 6 })
+            .then(p => p.content.map(s => ({
+              key: `prov-${s.id}`, category: 'Proveedor' as const, label: `Proveedor: ${s.code} - ${s.name}`,
+            }))),
+        )
+      }
+      if (showCli) {
+        calls.push(
+          salesService.listCustomers({ search: value || undefined, size: 6 })
+            .then(p => p.content.map(c => ({
+              key: `cli-${c.id}`, category: 'Cliente' as const, label: `Cliente: ${c.code} - ${c.name}`,
+            }))),
+        )
+      }
+      setResults((await Promise.all(calls)).flat())
+    }, 300)
+  }, [value, showProv, showCli, showDrop])
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setShowDrop(true) }}
+        onFocus={() => setShowDrop(true)}
+        onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+        className={inputBase}
+        placeholder="Buscar proveedor/cliente, o escribir libremente..."
+      />
+      {showDrop && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-xl">
+          <div className="flex items-center gap-3 border-b border-gray-100 px-3 py-2">
+            <label className="flex items-center gap-1.5 text-[12px] text-slate-500">
+              <input
+                type="checkbox"
+                checked={showProv}
+                onChange={e => setShowProv(e.target.checked)}
+                className="h-3.5 w-3.5 rounded accent-[#2C6B2F]"
+              />
+              Proveedores
+            </label>
+            <label className="flex items-center gap-1.5 text-[12px] text-slate-500">
+              <input
+                type="checkbox"
+                checked={showCli}
+                onChange={e => setShowCli(e.target.checked)}
+                className="h-3.5 w-3.5 rounded accent-[#2C6B2F]"
+              />
+              Clientes
+            </label>
+          </div>
+          {results.length === 0 ? (
+            <p className="px-3 py-3 text-[12px] text-slate-300">
+              Sin resultados — podés escribir libremente (ej. personal interno)
+            </p>
+          ) : (
+            results.slice(0, 10).map(r => (
+              <button
+                key={r.key}
+                type="button"
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { onChange(r.label); setShowDrop(false) }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[#F9FAFB]"
+              >
+                <span className={cn(
+                  'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                  r.category === 'Proveedor' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600',
+                )}>
+                  {r.category}
+                </span>
+                <span className="truncate text-[13px] text-[#101828]">
+                  {r.label.replace(/^(Proveedor|Cliente): /, '')}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Movement form ────────────────────────────────────────────────────────────
 
 interface MovFormValues {
@@ -408,6 +531,7 @@ interface MovFormValues {
   relatedDocument: string
   memo: string
   applyRules: boolean
+  exitDestination: StockExitDestination
 }
 
 function MovimientoForm({ itemId, onSuccess }: { itemId: number; onSuccess: () => void }) {
@@ -425,10 +549,15 @@ function MovimientoForm({ itemId, onSuccess }: { itemId: number; onSuccess: () =
       relatedDocument: '',
       memo: '',
       applyRules: false,
+      exitDestination: 'SALES',
     },
   })
 
   const currentType = watch('movementType')
+  const currentVariable = watch('stockVariable')
+  const currentApplyRules = watch('applyRules')
+  const showExitDestination = !isEntry && currentApplyRules
+    && EGRESS_REDIRECT_VARIABLES.includes(currentVariable)
 
   const mutation = useMutation({
     mutationFn: (body: StockMovementRequest) =>
@@ -444,6 +573,7 @@ function MovimientoForm({ itemId, onSuccess }: { itemId: number; onSuccess: () =
         relatedDocument: '',
         memo: '',
         applyRules: false,
+        exitDestination: 'SALES',
       })
       setSubmitError(null)
       onSuccess()
@@ -473,6 +603,7 @@ function MovimientoForm({ itemId, onSuccess }: { itemId: number; onSuccess: () =
       actorName:       values.actorName || undefined,
       relatedDocument: values.relatedDocument || undefined,
       memo:            values.memo || undefined,
+      exitDestination: showExitDestination ? values.exitDestination : undefined,
     }
     mutation.mutate(body)
   }
@@ -567,10 +698,9 @@ function MovimientoForm({ itemId, onSuccess }: { itemId: number; onSuccess: () =
       {/* Actor + Document */}
       <div className="grid grid-cols-2 gap-4">
         <FormField label="Actor" optional>
-          <input
-            {...register('actorName')}
-            className={inputBase}
-            placeholder="Ej: Proveedor SA"
+          <ActorField
+            value={watch('actorName')}
+            onChange={v => setValue('actorName', v)}
           />
         </FormField>
 
@@ -607,6 +737,24 @@ function MovimientoForm({ itemId, onSuccess }: { itemId: number; onSuccess: () =
           </p>
         </div>
       </label>
+
+      {/* Exit redirect destination */}
+      {showExitDestination && (
+        <FormField
+          label="Destino de la cascada"
+          required
+          helper="A qué reserva/faltante redirige esta salida al aplicar reglas."
+        >
+          <select
+            {...register('exitDestination', { required: true })}
+            className={inputBase}
+          >
+            {(['SALES', 'STOCK'] as StockExitDestination[]).map(d => (
+              <option key={d} value={d}>{EXIT_DESTINATION_LABELS[d]}</option>
+            ))}
+          </select>
+        </FormField>
+      )}
 
       {submitError && <ErrorBanner message={submitError} />}
 
@@ -764,6 +912,671 @@ function MovimientosTab({ itemId }: { itemId: number }) {
           Historial
         </p>
         <MovimientosHistory itemId={itemId} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Batch entry (Carga por lote) ─────────────────────────────────────────────
+
+interface ItemSearchResult {
+  id: number
+  fullCode: string
+  fullName: string
+  abbreviation: string | null
+}
+
+interface StagedLine {
+  tempId: string
+  itemId: number
+  itemCode: string
+  itemName: string
+  amount: string
+  unitOfMeasure: string
+}
+
+interface BatchFormValues {
+  entry: boolean
+  stockVariable: StockVariable
+  movementType: StockMovementType
+  movementDate: string
+  actorName: string
+  relatedDocument: string
+  memo: string
+  applyRules: boolean
+  exitDestination: StockExitDestination
+}
+
+function BatchStageRow({ staged, onAdd }: { staged: StagedLine[]; onAdd: (line: StagedLine) => void }) {
+  const [searchText, setSearchText] = useState('')
+  const [results, setResults] = useState<ItemSearchResult[]>([])
+  const [selectedItem, setSelectedItem] = useState<ItemSearchResult | null>(null)
+  const [showDrop, setShowDrop] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [unitOfMeasure, setUnitOfMeasure] = useState('')
+  const [rowError, setRowError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  function handleSearch(text: string) {
+    setSearchText(text)
+    setSelectedItem(null)
+    clearTimeout(debounceRef.current)
+    if (text.length < 2) { setResults([]); setShowDrop(false); return }
+    debounceRef.current = setTimeout(async () => {
+      const res = await apiClient.get<ItemSearchResult[]>('/items/search', { params: { q: text } })
+      setResults(res.data)
+      setShowDrop(true)
+    }, 300)
+  }
+
+  function handleAdd() {
+    setRowError(null)
+    if (!selectedItem) { setRowError('Seleccioná un ítem.'); return }
+    const parsedAmount = parseFloat(amount)
+    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setRowError('La cantidad debe ser mayor a 0.')
+      return
+    }
+    if (staged.some(l => l.itemId === selectedItem.id)) {
+      setRowError('Ese ítem ya está en el lote.')
+      return
+    }
+
+    onAdd({
+      tempId: `${selectedItem.id}-${Date.now()}`,
+      itemId: selectedItem.id,
+      itemCode: selectedItem.fullCode,
+      itemName: selectedItem.fullName,
+      amount,
+      unitOfMeasure,
+    })
+    setSearchText(''); setSelectedItem(null); setResults([]); setShowDrop(false)
+    setAmount(''); setUnitOfMeasure('')
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-end gap-3">
+        <div className="relative flex-1">
+          <FormField label="Ítem">
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={selectedItem ? `${selectedItem.fullCode} — ${selectedItem.fullName}` : searchText}
+                onChange={e => handleSearch(e.target.value)}
+                onFocus={() => {
+                  if (selectedItem) { setSelectedItem(null); setSearchText('') }
+                  if (results.length) setShowDrop(true)
+                }}
+                className={cn(inputBase, 'pl-9')}
+                placeholder="Buscar por código o nombre..."
+              />
+            </div>
+          </FormField>
+          {showDrop && results.length > 0 && (
+            <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-xl">
+              {results.slice(0, 8).map(r => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => { setSelectedItem(r); setShowDrop(false) }}
+                  className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
+                >
+                  <span className="shrink-0 font-mono text-[12px] text-slate-500">{r.fullCode}</span>
+                  <span className="text-[13px] text-[#101828]">{r.fullName}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="w-32">
+          <FormField label="Cantidad">
+            <input
+              type="number"
+              step="any"
+              min="0.001"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              className={inputBase}
+              placeholder="0.00"
+            />
+          </FormField>
+        </div>
+
+        <div className="w-28">
+          <FormField label="Unidad" optional>
+            <input
+              value={unitOfMeasure}
+              onChange={e => setUnitOfMeasure(e.target.value)}
+              className={inputBase}
+              placeholder="Ej: kg"
+            />
+          </FormField>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="flex h-12 shrink-0 items-center gap-1.5 rounded-xl bg-[#2C6B2F] px-4 text-[13px] font-semibold text-white transition hover:bg-[#245A27]"
+        >
+          <Plus size={14} />
+          Agregar
+        </button>
+      </div>
+      {rowError && <p className="text-[13px] text-red-500">{rowError}</p>}
+    </div>
+  )
+}
+
+function StagedTable({ lines, onRemove, onClear }: {
+  lines: StagedLine[]
+  onRemove: (tempId: string) => void
+  onClear: () => void
+}) {
+  if (lines.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-gray-200 py-8 text-slate-300">
+        <Package size={22} strokeWidth={1.2} />
+        <p className="text-[13px]">Sin ítems agregados</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          {lines.length} ítem{lines.length > 1 ? 's' : ''} en el lote
+        </p>
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex items-center gap-1.5 text-[12px] font-semibold text-red-500 transition hover:text-red-600"
+        >
+          <Trash2 size={12} />
+          Vaciar
+        </button>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-gray-100">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-gray-100 bg-[#f7f8fa]">
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Código</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Ítem</th>
+              <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Cantidad</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Unidad</th>
+              <th className="w-10 px-3 py-2.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map(l => (
+              <tr key={l.tempId} className="border-b border-gray-50 hover:bg-[#fafafa]">
+                <td className="px-4 py-2.5 font-mono text-[12px] text-slate-500">{l.itemCode}</td>
+                <td className="px-3 py-2.5 text-[#374151]">{l.itemName}</td>
+                <td className="px-3 py-2.5 text-right font-mono font-semibold text-[#374151]">{l.amount}</td>
+                <td className="px-3 py-2.5 text-slate-500">{l.unitOfMeasure || '—'}</td>
+                <td className="px-3 py-2.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => onRemove(l.tempId)}
+                    className="rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                  >
+                    <X size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+const BATCH_DEFAULT_VALUES: BatchFormValues = {
+  entry: true,
+  stockVariable: 'AVAILABLE',
+  movementType: 'ENTRY_INVENTORY',
+  movementDate: todayISO(),
+  actorName: '',
+  relatedDocument: '',
+  memo: '',
+  applyRules: false,
+  exitDestination: 'SALES',
+}
+
+// ─── Post-movement QR receipt ─────────────────────────────────────────────────
+
+/** Plain-text summary encoded into the QR, one line per posted row (mirrors Python's texto_total). */
+function buildReceiptText(movements: StockMovementResponse[]): string {
+  return movements
+    .map((m, i) => {
+      const dir = m.entry ? 'Entrada' : 'Salida'
+      const unit = m.unitOfMeasure ? ` ${m.unitOfMeasure}` : ''
+      return `Fila ${i + 1}: ${m.itemCode} — ${dir} ${m.stockVariableLabel} ${m.amount}${unit}`
+    })
+    .join('\n')
+}
+
+/** Shows a scannable QR summarizing everything just posted, mirroring Python's Ver_Qr dialog. */
+function ReceiptDialog({ movements, onClose }: { movements: StockMovementResponse[]; onClose: () => void }) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const receiptText = buildReceiptText(movements)
+
+  useEffect(() => {
+    let cancelled = false
+    QRCode.toDataURL(receiptText, { width: 320, margin: 1 })
+      .then(url => { if (!cancelled) setQrDataUrl(url) })
+      .catch(() => { if (!cancelled) setQrDataUrl(null) })
+    return () => { cancelled = true }
+  }, [receiptText])
+
+  function handleDownload() {
+    if (!qrDataUrl) return
+    const a = document.createElement('a')
+    a.href = qrDataUrl
+    a.download = `recibo_stock_${todayISO()}.png`
+    a.click()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="relative flex max-h-[90vh] w-[420px] flex-col rounded-2xl border border-gray-200 bg-white shadow-xl">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2C6B2F]/10">
+              <QrCode size={16} className="text-[#2C6B2F]" />
+            </div>
+            <div>
+              <p className="text-[14px] font-semibold text-[#111827]">Movimiento registrado</p>
+              <p className="text-[12px] text-slate-400">Comprobante QR del lote posteado</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-gray-100 hover:text-slate-600"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex flex-col items-center gap-4">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="QR del comprobante" className="h-56 w-56 rounded-xl border border-gray-100" />
+            ) : (
+              <div className="flex h-56 w-56 items-center justify-center rounded-xl border border-dashed border-gray-200">
+                <Spinner />
+              </div>
+            )}
+            <div className="w-full rounded-xl border border-gray-100 bg-[#f7f8fa] p-3">
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                {movements.length} línea{movements.length > 1 ? 's' : ''} posteada{movements.length > 1 ? 's' : ''}
+              </p>
+              <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-500">
+                {receiptText}
+              </pre>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-gray-100 px-6 py-4">
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={!qrDataUrl}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-500 transition hover:border-gray-300 hover:text-slate-700 disabled:opacity-40"
+          >
+            <Download size={14} />
+            Descargar QR
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-[#2C6B2F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#245A27]"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BatchDialog({ open, onClose, onSuccess }: {
+  open: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [isEntry, setIsEntry] = useState(true)
+  const [stagedLines, setStagedLines] = useState<StagedLine[]>([])
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [receiptMovements, setReceiptMovements] = useState<StockMovementResponse[] | null>(null)
+
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<BatchFormValues>({
+    defaultValues: BATCH_DEFAULT_VALUES,
+  })
+
+  const currentType = watch('movementType')
+  const currentVariable = watch('stockVariable')
+  const currentApplyRules = watch('applyRules')
+  const directionTypes = isEntry ? ENTRY_TYPES : EXIT_TYPES
+  const isTypeValid = directionTypes.includes(currentType as StockMovementType)
+  const showExitDestination = !isEntry && currentApplyRules
+    && EGRESS_REDIRECT_VARIABLES.includes(currentVariable)
+
+  const mutation = useMutation({
+    mutationFn: (body: StockMovementBatchRequest) =>
+      apiClient.post<StockMovementResponse[]>('/stock/movements/batch', body),
+    onSuccess: (res) => {
+      onSuccess()
+      // Show the QR receipt before closing — mirrors Python's Ver_Qr dialog shown right
+      // after muevo_stock posts the staged rows (lleva_stock_ok_2026.py:1404-1423).
+      setReceiptMovements(res.data)
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setSubmitError(msg ?? 'No se pudo registrar el lote de movimientos.')
+    },
+  })
+
+  function handleReceiptClose() {
+    setReceiptMovements(null)
+    resetAll()
+    onClose()
+  }
+
+  function resetAll() {
+    reset(BATCH_DEFAULT_VALUES)
+    setIsEntry(true)
+    setStagedLines([])
+    setSubmitError(null)
+    setValidationError(null)
+  }
+
+  function handleToggle(entry: boolean) {
+    setIsEntry(entry)
+    setValue('entry', entry)
+    setValue('movementType', entry ? 'ENTRY_INVENTORY' : 'EXIT_REMIT_TO_THIRD')
+  }
+
+  function handleAddLine(line: StagedLine) {
+    setValidationError(null)
+    setStagedLines(prev => [...prev, line])
+  }
+
+  function handleRemoveLine(tempId: string) {
+    setStagedLines(prev => prev.filter(l => l.tempId !== tempId))
+  }
+
+  function handleClearLines() {
+    setStagedLines([])
+    setValidationError(null)
+  }
+
+  function handleClose() {
+    resetAll()
+    onClose()
+  }
+
+  function onSubmit(values: BatchFormValues) {
+    setSubmitError(null)
+    setValidationError(null)
+
+    if (stagedLines.length === 0) {
+      setValidationError('Agregá al menos un ítem al lote antes de postear.')
+      return
+    }
+
+    const itemIds = stagedLines.map(l => l.itemId)
+    if (new Set(itemIds).size !== itemIds.length) {
+      setValidationError('Hay ítems duplicados en el lote. Un mismo ítem no puede repetirse.')
+      return
+    }
+
+    if (stagedLines.some(l => !l.amount || parseFloat(l.amount) <= 0)) {
+      setValidationError('Todas las cantidades deben ser mayores a 0.')
+      return
+    }
+
+    const body: StockMovementBatchRequest = {
+      entry: isEntry,
+      stockVariable: values.stockVariable,
+      movementType: values.movementType,
+      applyRules: values.applyRules,
+      movementDate: values.movementDate,
+      actorName:       values.actorName || undefined,
+      relatedDocument: values.relatedDocument || undefined,
+      memo:            values.memo || undefined,
+      exitDestination: showExitDestination ? values.exitDestination : undefined,
+      lines: stagedLines.map(l => ({
+        itemId: l.itemId,
+        amount: parseFloat(l.amount),
+        unitOfMeasure: l.unitOfMeasure || undefined,
+      })),
+    }
+    mutation.mutate(body)
+  }
+
+  if (!open) return null
+
+  if (receiptMovements) {
+    return <ReceiptDialog movements={receiptMovements} onClose={handleReceiptClose} />
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="relative flex max-h-[90vh] w-[720px] flex-col rounded-2xl border border-gray-200 bg-white shadow-xl">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2C6B2F]/10">
+              <Layers size={16} className="text-[#2C6B2F]" />
+            </div>
+            <div>
+              <p className="text-[14px] font-semibold text-[#111827]">Carga por lote</p>
+              <p className="text-[12px] text-slate-400">Registrar varios ítems como un único movimiento</p>
+            </div>
+          </div>
+          <button
+            onClick={handleClose}
+            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-gray-100 hover:text-slate-600"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body + footer */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex flex-col gap-5">
+              {/* Entry / Exit toggle */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggle(true)}
+                  className={cn(
+                    'flex flex-1 items-center justify-center gap-2 rounded-xl border py-3 text-[14px] font-semibold transition',
+                    isEntry
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : 'border-gray-200 bg-white text-slate-400 hover:border-gray-300 hover:text-slate-500',
+                  )}
+                >
+                  <ArrowDownCircle size={16} />
+                  Entrada
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggle(false)}
+                  className={cn(
+                    'flex flex-1 items-center justify-center gap-2 rounded-xl border py-3 text-[14px] font-semibold transition',
+                    !isEntry
+                      ? 'border-red-400 bg-red-50 text-red-600'
+                      : 'border-gray-200 bg-white text-slate-400 hover:border-gray-300 hover:text-slate-500',
+                  )}
+                >
+                  <ArrowUpCircle size={16} />
+                  Salida
+                </button>
+              </div>
+
+              {/* Variable + Type */}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Variable de stock" required>
+                  <select
+                    {...register('stockVariable', { required: true })}
+                    className={cn(inputBase, errors.stockVariable && inputError)}
+                  >
+                    {BALANCE_VARIABLES.map(v => (
+                      <option key={v} value={v}>{VARIABLE_LABELS[v]}</option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Tipo de movimiento" required>
+                  <select
+                    {...register('movementType', { required: true })}
+                    className={cn(inputBase, errors.movementType && inputError)}
+                  >
+                    {!isTypeValid && (
+                      <option value="" disabled>Seleccionar...</option>
+                    )}
+                    {directionTypes.map(t => (
+                      <option key={t} value={t}>{MOVEMENT_TYPE_LABELS[t]}</option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+
+              {/* Date + Actor */}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Fecha" required error={errors.movementDate ? 'Requerida' : undefined}>
+                  <input
+                    type="date"
+                    {...register('movementDate', { required: true })}
+                    className={cn(inputBase, errors.movementDate && inputError)}
+                  />
+                </FormField>
+
+                <FormField label="Actor" optional>
+                  <ActorField
+                    value={watch('actorName')}
+                    onChange={v => setValue('actorName', v)}
+                  />
+                </FormField>
+              </div>
+
+              {/* Document */}
+              <FormField label="Documento" optional>
+                <input
+                  {...register('relatedDocument')}
+                  className={inputBase}
+                  placeholder="Ej: REM-00123"
+                />
+              </FormField>
+
+              {/* Memo */}
+              <FormField label="Memo" optional>
+                <textarea
+                  {...register('memo')}
+                  rows={2}
+                  className={textareaBase}
+                  placeholder="Observaciones del movimiento..."
+                />
+              </FormField>
+
+              {/* Apply rules */}
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-[#f7f8fa] px-4 py-3.5 transition hover:bg-white">
+                <input
+                  type="checkbox"
+                  {...register('applyRules')}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[#2C6B2F]"
+                />
+                <div>
+                  <p className="text-[14px] font-medium text-[#374151]">Aplicar reglas automáticas</p>
+                  <p className="mt-0.5 text-[12px] text-slate-400">
+                    Si está activo, el sistema propagará cada movimiento según las reglas de faltantes configuradas para cada ítem.
+                  </p>
+                </div>
+              </label>
+
+              {/* Exit redirect destination */}
+              {showExitDestination && (
+                <FormField
+                  label="Destino de la cascada"
+                  required
+                  helper="A qué reserva/faltante redirige esta salida al aplicar reglas, para todo el lote."
+                >
+                  <select
+                    {...register('exitDestination', { required: true })}
+                    className={inputBase}
+                  >
+                    {(['SALES', 'STOCK'] as StockExitDestination[]).map(d => (
+                      <option key={d} value={d}>{EXIT_DESTINATION_LABELS[d]}</option>
+                    ))}
+                  </select>
+                </FormField>
+              )}
+
+              {/* Staging table */}
+              <div className="border-t border-gray-100 pt-5">
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Ítems del lote
+                </p>
+                <BatchStageRow staged={stagedLines} onAdd={handleAddLine} />
+                <div className="mt-4">
+                  <StagedTable lines={stagedLines} onRemove={handleRemoveLine} onClear={handleClearLines} />
+                </div>
+              </div>
+
+              {validationError && <ErrorBanner message={validationError} />}
+              {submitError && <ErrorBanner message={submitError} />}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex shrink-0 items-center justify-between border-t border-gray-100 px-6 py-4">
+            <p className="text-[12px] text-slate-400">
+              {stagedLines.length === 0
+                ? 'Agregá al menos un ítem'
+                : `${stagedLines.length} ítem${stagedLines.length > 1 ? 's' : ''} listo${stagedLines.length > 1 ? 's' : ''} para postear`
+              }
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-[13px] font-medium text-slate-500 transition hover:border-gray-300 hover:text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={mutation.isPending || stagedLines.length === 0}
+                className={cn(
+                  'flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold transition',
+                  stagedLines.length > 0 && !mutation.isPending
+                    ? 'bg-[#2C6B2F] text-white hover:bg-[#245A27]'
+                    : 'cursor-not-allowed bg-gray-100 text-slate-400',
+                )}
+              >
+                {mutation.isPending ? (
+                  <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Posteando...</>
+                ) : (
+                  <>
+                    <Layers size={14} />
+                    Postear Lote
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   )
@@ -988,13 +1801,24 @@ function ItemList({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function StockPage() {
+  const qc = useQueryClient()
   const [selected, setSelected] = useState<StockLevel | null>(null)
   const [showReport, setShowReport] = useState(false)
+  const [showBatch, setShowBatch] = useState(false)
 
   const { data: levels = [], isLoading } = useQuery<StockLevel[]>({
     queryKey: ['stock-levels'],
     queryFn: () => apiClient.get<StockLevel[]>('/stock/items/levels').then(r => r.data),
   })
+
+  // A batch can touch several distinct items at once, so invalidation is broadened
+  // to the whole ['stock-movements'] / ['stock-levels'] / ['stock-level'] prefixes
+  // instead of a single itemId, mirroring MovimientosTab.handleSuccess.
+  function handleBatchSuccess() {
+    qc.invalidateQueries({ queryKey: ['stock-movements'] })
+    qc.invalidateQueries({ queryKey: ['stock-levels'] })
+    qc.invalidateQueries({ queryKey: ['stock-level'] })
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#f7f8fa]">
@@ -1036,6 +1860,13 @@ export function StockPage() {
             </>
           )}
           <button
+            onClick={() => setShowBatch(true)}
+            className="flex items-center gap-2 rounded-xl border border-[#2C6B2F]/30 bg-[#2C6B2F]/10 px-4 py-2 text-[13px] font-semibold text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15"
+          >
+            <Layers size={14} />
+            Carga por lote
+          </button>
+          <button
             onClick={() => setShowReport(true)}
             className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[13px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
           >
@@ -1065,6 +1896,12 @@ export function StockPage() {
         levels={levels}
         open={showReport}
         onClose={() => setShowReport(false)}
+      />
+
+      <BatchDialog
+        open={showBatch}
+        onClose={() => setShowBatch(false)}
+        onSuccess={handleBatchSuccess}
       />
     </div>
   )
