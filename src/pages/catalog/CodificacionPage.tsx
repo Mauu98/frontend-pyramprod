@@ -894,8 +894,6 @@ function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
 }
 
 // ─── Item class form ──────────────────────────────────────────────────────────
-const WEIGHT_METHODS = ['Mm.', 'Mm2.', 'Mm3.', 'Kg./Und', 'Und/Kg.'] as const
-
 function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   item: ItemClass | null; familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
 }) {

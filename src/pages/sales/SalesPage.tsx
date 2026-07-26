@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ShoppingBag, Search, Plus, X, FileText, Package } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
@@ -166,15 +166,18 @@ function NewQuoteDialog({ open, customer, onClose, onCreated }: {
   const perceptionRates = taxRates.filter(r => r.type === 'PERCEPTION')
 
   // Auto-fetch exchange rate when currency changes (non-ARS)
-  useQuery<{ rate: number }>({
+  const { data: exchangeRateData } = useQuery<{ rate: number }>({
     queryKey: ['exchange-rate', currency],
     queryFn: () =>
       apiClient.get<{ rate: number }>(`/exchange-rates/current/${currency}`).then(r => r.data),
     enabled: currency !== 'ARS',
-    onSuccess: (data: { rate: number }) => {
-      setLines(prev => prev.map(l => ({ ...l, exchangeRate: String(data.rate) })))
-    },
-  } as Parameters<typeof useQuery>[0])
+  })
+
+  useEffect(() => {
+    if (exchangeRateData) {
+      setLines(prev => prev.map(l => ({ ...l, exchangeRate: String(exchangeRateData.rate) })))
+    }
+  }, [exchangeRateData])
 
   const mutation = useMutation({
     mutationFn: (req: SalesQuoteRequest) =>
