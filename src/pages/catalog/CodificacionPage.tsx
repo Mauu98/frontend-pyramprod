@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
+import * as XLSX from 'xlsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
@@ -14,6 +15,7 @@ import { NewItemForm } from '@/components/catalog/NewItemForm'
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
   AlertTriangle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
+  FileSpreadsheet, ArrowDownUp,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -274,6 +276,19 @@ function ConfirmDialog({
   )
 }
 
+// ─── Familias XLSX export ───────────────────────────────────────────────────────
+function generateFamiliasXLSX(families: Family[], segmentLabel: string) {
+  const headers = ['Código', 'Nombre', 'Abreviatura', 'Descripción']
+  const data = families.map(f => [f.code, f.name, f.abbreviation ?? '', f.description ?? ''])
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+  ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 16 }, { wch: 48 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Familias')
+  const today = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `familias_${segmentLabel}_${today}.xlsx`)
+}
+
 // ─── Catalog column ───────────────────────────────────────────────────────────
 const SINGULAR: Record<string, string> = {
   Segmentos: 'segmento',
@@ -283,21 +298,29 @@ const SINGULAR: Record<string, string> = {
 
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
-  onSelect, onNew, onEdit, onDelete, onBatch, onCopy,
+  onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, sortable, width = 'w-[272px]',
 }: {
   title: string; icon: LucideIcon; rows: ColRow[]; selected: ColRow | null
   isLoading?: boolean; enabled: boolean; placeholderText: string
   onSelect: (r: ColRow) => void; onNew: () => void
   onEdit: (r: ColRow) => void; onDelete: (r: ColRow) => void
-  onBatch?: () => void; onCopy?: () => void
+  onBatch?: () => void; onCopy?: () => void; onExport?: () => void
+  sortable?: boolean; width?: string
 }) {
   const [q, setQ] = useState('')
-  const filtered  = rows.filter(r => !q || r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q))
+  const [sortMode, setSortMode] = useState<'code' | 'name'>('code')
+  const filtered = rows.filter(r => !q || r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q))
+  const sorted = sortable
+    ? [...filtered].sort((a, b) => sortMode === 'code'
+        ? a.code.localeCompare(b.code, 'es', { numeric: true })
+        : a.name.localeCompare(b.name, 'es'))
+    : filtered
   const singular  = SINGULAR[title] ?? title.toLowerCase()
 
   return (
     <div className={cn(
-      'flex w-[272px] shrink-0 flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
+      'flex shrink-0 flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
+      width,
       !enabled && 'pointer-events-none opacity-25',
     )}>
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-100 bg-[#f7f8fa] pl-5 pr-7">
@@ -310,10 +333,28 @@ function CatalogColumn({
         </div>
         {enabled && (
           <div className="flex shrink-0 items-center gap-1">
+            {sortable && (
+              <button
+                onClick={() => setSortMode(v => v === 'code' ? 'name' : 'code')}
+                title={sortMode === 'code' ? 'Ordenar alfabéticamente' : 'Ordenar por código'}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+              >
+                <ArrowDownUp size={13} />
+              </button>
+            )}
+            {onExport && (
+              <button
+                onClick={onExport}
+                title={`Exportar ${title.toLowerCase()} a XLSX`}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+              >
+                <FileSpreadsheet size={13} />
+              </button>
+            )}
             {onCopy && (
               <button
                 onClick={onCopy}
-                title={`Copiar ${singular}s de otra familia`}
+                title={`Importar ${singular}s de otra familia`}
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
               >
                 <Copy size={13} />
@@ -362,36 +403,39 @@ function CatalogColumn({
           <div className="flex h-28 items-center justify-center">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="flex h-28 flex-col items-center justify-center gap-2">
             <Search size={20} strokeWidth={1.2} className="text-slate-200" />
             <p className="text-[13px] text-slate-300">Sin resultados</p>
           </div>
-        ) : filtered.map(row => {
+        ) : sorted.map(row => {
           const isSel = selected?.id === row.id
           return (
             <div
               key={row.id}
               onClick={() => onSelect(row)}
               className={cn(
-                'group relative flex cursor-pointer items-center gap-3 border-b border-gray-50 px-5 py-3.5 transition-colors duration-100',
+                'group relative flex cursor-pointer items-start gap-3 border-b border-gray-50 px-5 py-3.5 transition-colors duration-100',
                 isSel ? 'bg-[#2C6B2F]/8' : 'hover:bg-[#fafafa]',
               )}
             >
               {isSel && <span className="absolute inset-y-0 left-0 w-0.5 rounded-r bg-[#2C6B2F]" />}
               <span className={cn(
-                'shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-bold',
+                'shrink-0 self-center rounded-md px-2 py-0.5 font-mono text-[11px] font-bold',
                 isSel ? 'bg-[#2C6B2F]/12 text-[#2C6B2F]' : 'bg-slate-100 text-slate-500',
               )}>
                 {row.code}
               </span>
-              <span className={cn(
-                'min-w-0 flex-1 truncate text-[14px] leading-snug',
-                isSel ? 'font-semibold text-[#1a3d1c]' : 'font-medium text-[#374151]',
-              )}>
+              <span
+                title={row.name}
+                className={cn(
+                  'min-w-0 flex-1 line-clamp-2 break-words text-[14px] leading-snug',
+                  isSel ? 'font-semibold text-[#1a3d1c]' : 'font-medium text-[#374151]',
+                )}
+              >
                 {row.name}
               </span>
-              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="flex shrink-0 self-center items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 <button
                   title={`Editar ${singular}`}
                   onClick={e => { e.stopPropagation(); onEdit(row) }}
@@ -1193,14 +1237,15 @@ function BatchClassImportForm({ familyId, familyLabel, onSave, onClose }: {
   )
 }
 
-// ─── Copy classes to family form ──────────────────────────────────────────────
-function CopyToFamilyForm({ sourceFamilyId, sourceFamilyLabel, onSave, onClose }: {
-  sourceFamilyId: number; sourceFamilyLabel: string; onSave: () => void; onClose: () => void
+// ─── Import classes from another family (checklist) ───────────────────────────
+function ImportClassesForm({ targetFamilyId, targetFamilyLabel, onSave, onClose }: {
+  targetFamilyId: number; targetFamilyLabel: string; onSave: () => void; onClose: () => void
 }) {
   const [searchText, setSearchText] = useState('')
   const [results, setResults] = useState<Family[]>([])
-  const [selected, setSelected] = useState<Family | null>(null)
+  const [source, setSource] = useState<Family | null>(null)
   const [showDrop, setShowDrop] = useState(false)
+  const [checked, setChecked] = useState<Set<number>>(new Set())
   const [submitError, setSubmitError] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -1215,51 +1260,75 @@ function CopyToFamilyForm({ sourceFamilyId, sourceFamilyLabel, onSave, onClose }
     debounceRef.current = setTimeout(() => {
       const q = searchText.toLowerCase()
       const filtered = allFamilies.filter(f =>
-        f.id !== sourceFamilyId && (f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q))
+        f.id !== targetFamilyId && (f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q))
       )
       setResults(filtered.slice(0, 10))
       setShowDrop(true)
     }, 200)
-  }, [searchText, allFamilies, sourceFamilyId])
+  }, [searchText, allFamilies, targetFamilyId])
+
+  const { data: sourceClasses = [], isLoading: loadingSourceClasses } = useQuery<ItemClass[]>({
+    queryKey: ['item-classes', source?.id],
+    queryFn: () => apiClient.get<ItemClass[]>(`/families/${source!.id}/item-classes`).then(r => r.data),
+    enabled: !!source,
+  })
+
+  const selectSource = (f: Family | null) => {
+    setSource(f)
+    setChecked(new Set())
+    setShowDrop(false)
+  }
+
+  const toggle = (id: number) => {
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const allChecked = sourceClasses.length > 0 && checked.size === sourceClasses.length
+  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(sourceClasses.map(c => c.id)))
 
   const qc = useQueryClient()
   const m = useMutation({
     mutationFn: () => apiClient.post('/item-classes/copy-to-family', {
-      sourceFamilyId,
-      targetFamilyId: selected!.id,
+      sourceFamilyId: source!.id,
+      targetFamilyId,
+      classIds: [...checked],
     }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['item-classes', selected!.id] })
+      qc.invalidateQueries({ queryKey: ['item-classes', targetFamilyId] })
       onSave()
     },
-    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al copiar las clases.'),
+    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar las clases.'),
   })
 
   return (
     <form
-      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (selected) m.mutate() }}
+      onSubmit={e => { e.preventDefault(); setSubmitError(null); if (checked.size > 0) m.mutate() }}
       className="flex flex-col gap-6"
     >
-      <ParentBadge label="Origen" value={sourceFamilyLabel} />
+      <ParentBadge label="Familia destino" value={targetFamilyLabel} />
 
-      <FormSection title="Familia destino" first>
+      <FormSection title="Familia origen" first>
         <p className="text-[13px] text-slate-400">
-          Se copiarán todas las clases de <strong>{sourceFamilyLabel}</strong> a la familia que elijas.
+          Elegí la familia de la que querés traer clases hacia <strong>{targetFamilyLabel}</strong>.
         </p>
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
           <input
-            value={selected ? `${selected.code} — ${selected.name}` : searchText}
-            onChange={e => { setSearchText(e.target.value); setSelected(null) }}
-            onFocus={() => { if (selected) { setSelected(null); setSearchText('') }; if (results.length) setShowDrop(true) }}
+            value={source ? `${source.code} — ${source.name}` : searchText}
+            onChange={e => { setSearchText(e.target.value); selectSource(null) }}
+            onFocus={() => { if (source) { selectSource(null); setSearchText('') }; if (results.length) setShowDrop(true) }}
             className={cn(inputBase, 'pl-9')}
-            placeholder="Buscar familia destino..."
+            placeholder="Buscar familia origen..."
           />
           {showDrop && results.length > 0 && (
             <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
               {results.map(f => (
                 <button key={f.id} type="button"
-                  onClick={() => { setSelected(f); setShowDrop(false) }}
+                  onClick={() => selectSource(f)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
                 >
                   <span className="shrink-0 font-mono text-[12px] text-[#667085]">{f.code}</span>
@@ -1271,11 +1340,56 @@ function CopyToFamilyForm({ sourceFamilyId, sourceFamilyLabel, onSave, onClose }
         </div>
       </FormSection>
 
+      {source && (
+        <FormSection title="Clases a importar">
+          {loadingSourceClasses ? (
+            <div className="flex h-20 items-center justify-center">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
+            </div>
+          ) : sourceClasses.length === 0 ? (
+            <p className="py-3 text-center text-[13px] text-slate-400">
+              {source.name} no tiene clases para importar.
+            </p>
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-center gap-2.5 border-b border-[#E4E7EC] pb-3">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={toggleAll}
+                  className="h-4 w-4 accent-[#2C6B2F]"
+                />
+                <span className="text-[13px] font-semibold text-[#344054]">
+                  Seleccionar todas ({sourceClasses.length})
+                </span>
+              </label>
+              <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+                {sourceClasses.map(c => (
+                  <label
+                    key={c.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-[#F9FAFB]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                      className="h-4 w-4 shrink-0 accent-[#2C6B2F]"
+                    />
+                    <span className="shrink-0 font-mono text-[11px] font-bold text-slate-500">{c.code}</span>
+                    <span className="min-w-0 flex-1 truncate text-[14px] text-[#101828]">{c.name}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </FormSection>
+      )}
+
       {submitError && <ErrorBanner message={submitError} />}
       <FormActions
         pending={m.isPending}
         isEdit={false}
-        label="Copiar clases"
+        label={`Importar ${checked.size} clase${checked.size !== 1 ? 's' : ''}`}
         onClose={onClose}
       />
     </form>
@@ -1440,7 +1554,7 @@ export function CodificacionPage() {
 
           <CatalogColumn
             title="Segmentos" icon={LayoutGrid} rows={segments} selected={selSeg}
-            isLoading={loadSegs} enabled={true} placeholderText=""
+            isLoading={loadSegs} enabled={true} placeholderText="" width="w-[320px]"
             onSelect={row => {
               const seg = segments.find(s => s.id === row.id)!
               setSelSeg(seg); setSelFam(null); setSelClass(null); setSelItem(null)
@@ -1448,6 +1562,7 @@ export function CodificacionPage() {
             onNew={() => openNew('segment')}
             onEdit={row => openEdit('segment', segments.find(s => s.id === row.id)!)}
             onDelete={row => { setDelTarget({ kind: 'segment', row }); setDelApiErr(null) }}
+            sortable
           />
 
           <CatalogColumn
@@ -1461,6 +1576,8 @@ export function CodificacionPage() {
             onEdit={row => openEdit('family', families.find(f => f.id === row.id)!)}
             onDelete={row => { setDelTarget({ kind: 'family', row }); setDelApiErr(null) }}
             onBatch={() => setSheet('family-batch')}
+            onExport={() => generateFamiliasXLSX(families, selSeg ? `${selSeg.code}` : 'todas')}
+            sortable
           />
 
           <CatalogColumn
@@ -1609,15 +1726,15 @@ export function CodificacionPage() {
 
       <FormDialog
         open={sheet === 'copy-to-family'}
-        title="Copiar clases a otra familia"
-        subtitle={selFam ? `Origen: ${selFam.code} — ${selFam.name}` : undefined}
+        title="Importar clases de otra familia"
+        subtitle={selFam ? `Destino: ${selFam.code} — ${selFam.name}` : undefined}
         width="w-[520px]"
         onClose={() => setSheet(null)}
       >
         {selFam && (
-          <CopyToFamilyForm
-            sourceFamilyId={selFam.id}
-            sourceFamilyLabel={`${selFam.code} — ${selFam.name}`}
+          <ImportClassesForm
+            targetFamilyId={selFam.id}
+            targetFamilyLabel={`${selFam.code} — ${selFam.name}`}
             onSave={() => setSheet(null)}
             onClose={() => setSheet(null)}
           />
