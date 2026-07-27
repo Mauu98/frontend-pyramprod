@@ -76,21 +76,20 @@ export function LoginPage() {
 
         <div className="relative w-full max-w-md space-y-8">
 
-          {/* Header */}
-          <div className="text-center">
-            <div className="mb-5 flex justify-center">
-              <div
-                className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-extrabold text-white"
-                style={{
-                  background: `linear-gradient(135deg, ${PRIMARY} 0%, #1E4B21 100%)`,
-                  boxShadow: `0 10px 24px -8px ${PRIMARY}80`,
-                }}
-              >
-                P
+          {/* Header — Pyramprod logo lockup */}
+          <div className="flex justify-center">
+            <div
+              className="inline-flex items-center gap-3 rounded-2xl px-5 py-3.5"
+              style={{ background: '#0B1F14', boxShadow: '0 12px 28px -10px rgba(11,31,20,0.6)' }}
+            >
+              <img src="/pyramprod-logo.png" alt="Pyramprod" className="h-12 w-12 shrink-0" />
+              <div className="text-left leading-tight">
+                <div className="text-xl font-extrabold tracking-wide text-white">
+                  PYRAM<span style={{ color: '#27AE60' }}>PROD</span>
+                </div>
+                <div className="mt-0.5 text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>Gestión Industrial</div>
               </div>
             </div>
-            <h1 className="text-4xl font-bold tracking-tight" style={{ color: PRIMARY }}>Pyramprod</h1>
-            <p className="mt-2 text-sm text-gray-500">Laboratorio de Compras</p>
           </div>
 
           {/* Card */}
