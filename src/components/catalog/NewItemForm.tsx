@@ -29,7 +29,7 @@ function composeName(matName: string, d1: number, d2: number, d3: number, unit: 
   return [matName, dim, opName, complement ? `[${complement}]` : '', fn].filter(Boolean).join(' ').slice(0, 145)
 }
 
-interface FormValues { d1: string; d2: string; d3: string; func: string; complement: string; weightInput: string }
+interface FormValues { d1: string; d2: string; d3: string; func: string; complement: string }
 
 // ─── Material picker ──────────────────────────────────────────────────────────
 function MaterialPicker({ value, onChange }: { value: string; onChange: (code: string, name: string) => void }) {
@@ -83,7 +83,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
 }) {
   const qc = useQueryClient()
   const { register, handleSubmit, control, formState: { errors } } = useForm<FormValues>({
-    defaultValues: { d1: '', d2: '', d3: '', func: '', complement: '', weightInput: '' },
+    defaultValues: { d1: '', d2: '', d3: '', func: '', complement: '' },
   })
   const watched = useWatch({ control })
   const [matName, setMatName] = useState(itemType.materialName ?? '')
@@ -97,13 +97,9 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
   const unit = itemType.weightMethod
 
   const weight = useMemo(() => {
-    if (itemType.manualWeight) {
-      const w = parseFloat(watched.weightInput || '')
-      return isNaN(w) ? null : w
-    }
     if (!unit || !itemType.specificWeight || !itemType.nominalDimension) return null
     return calcWeight(unit, itemType.specificWeight, itemType.nominalDimension, d1, d2, d3)
-  }, [unit, itemType, d1, d2, d3, watched.weightInput])
+  }, [unit, itemType, d1, d2, d3])
 
   const previewName = useMemo(() =>
     composeName(matName, d1, d2, d3, unit, itemType.operatorName ?? '', watched.complement ?? '', watched.func ?? ''),
@@ -194,21 +190,12 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
                   </FormField>
                 )}
               </div>
-              {itemType.manualWeight ? (
-                <FormField label="Peso (kg)" optional helper="Se carga a mano — esta clase no calcula el peso con ninguna fórmula" className="mt-2">
-                  <input type="number" step="0.000001" min="0" placeholder="0.000000"
-                    {...register('weightInput')}
-                    className={inputBase}
-                  />
-                </FormField>
-              ) : (
-                weight !== null && weight > 0 && (
-                  <div className="mt-2 flex items-center gap-2 rounded border border-[#E8E8E8] bg-[#f7f8fa] px-3 py-2">
-                    <Weight size={13} className="text-[#888888]" />
-                    <span className="text-[13px] text-[#555555]">Peso calculado</span>
-                    <span className="ml-auto font-mono text-[14px] font-semibold text-[#1A1A1A]">{weight.toFixed(6)} kg</span>
-                  </div>
-                )
+              {weight !== null && weight > 0 && (
+                <div className="mt-2 flex items-center gap-2 rounded border border-[#E8E8E8] bg-[#f7f8fa] px-3 py-2">
+                  <Weight size={13} className="text-[#888888]" />
+                  <span className="text-[13px] text-[#555555]">Peso calculado</span>
+                  <span className="ml-auto font-mono text-[14px] font-semibold text-[#1A1A1A]">{weight.toFixed(6)} kg</span>
+                </div>
               )}
             </FormSection>
 
