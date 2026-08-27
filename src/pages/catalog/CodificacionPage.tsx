@@ -12,13 +12,23 @@ import {
 } from '@/components/ui/form-field'
 import type { Segment, Family, ItemClass, ItemSummary, ItemDetail } from '@/types/api.types'
 import { NewItemForm } from '@/components/catalog/NewItemForm'
+import { MaterialReferenceGallery } from '@/components/catalog/MaterialReferenceGallery'
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
-  AlertTriangle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
+  AlertTriangle, AlertCircle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
   FileSpreadsheet, ArrowDownUp,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import imgRedondo from '@/assets/materials/redondo.png'
+import imgTuboRedondo from '@/assets/materials/tubo_redondo.png'
+import imgCuadrado from '@/assets/materials/cuadrado.png'
+import imgTuboCuadrado from '@/assets/materials/tubo_cuadrado.png'
+import imgPerfilL from '@/assets/materials/perfil_l.png'
+import imgPerfilU from '@/assets/materials/perfil_u.png'
+import imgPerfilI from '@/assets/materials/perfil_i.png'
+import imgPerfilT from '@/assets/materials/perfil_t.png'
+import imgKgxm from '@/assets/materials/kgxm.png'
 
 type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | 'family-batch' | 'class-batch' | 'copy-to-family' | null
 interface ColRow { id: number; code: string; name: string }
@@ -761,41 +771,46 @@ type SectionShape = {
   label: string
   paramLabels: string[]
   compute: (vals: number[]) => number
+  /** Label for the result row. Defaults to "Sección en Mm2." when omitted. */
+  resultLabel?: string
+  /** Unit shown next to each param input. Defaults to "Mm." for every field when omitted. */
+  paramUnits?: string[]
 }
 
 const SECTION_SHAPES: SectionShape[] = [
   { id: 'round_solid',  label: 'Barra redonda',    paramLabels: ['Diámetro D'],                   compute: ([D])          => Math.PI * D * D / 4 },
   { id: 'round_hollow', label: 'Caño redondo',      paramLabels: ['Diámetro ext.', 'Diámetro int.'], compute: ([De, Di])     => Math.PI * (De * De - Di * Di) / 4 },
   { id: 'flat_bar',     label: 'Planchuela',        paramLabels: ['Ancho', 'Espesor'],             compute: ([A, B])        => A * B },
-  { id: 'square_solid', label: 'Barra cuadrada',    paramLabels: ['Lado L'],                       compute: ([L])           => L * L },
-  { id: 'square_tube',  label: 'Tubo cuadrado',     paramLabels: ['Lado ext.', 'Espesor'],         compute: ([L, e])        => L * L - (L - 2 * e) * (L - 2 * e) },
   { id: 'rect_tube',    label: 'Tubo rectangular',  paramLabels: ['Lado A', 'Lado B', 'Espesor'],  compute: ([A, B, e])     => A * B - (A - 2 * e) * (B - 2 * e) },
   { id: 'angle_l',      label: 'Perfil L',          paramLabels: ['Ala A', 'Ala B', 'Espesor'],   compute: ([A, B, e])     => (A + B - e) * e },
-  { id: 'channel_u',    label: 'Perfil U/C',        paramLabels: ['Alto H', 'Ancho B', 'Espesor'], compute: ([H, B, e])     => H * e + 2 * (B - e) * e },
+  { id: 'channel_u',    label: 'Perfil U/C',        paramLabels: ['Distancia D1', 'Altura D2', 'Espesor E'], compute: ([D1, D2, E]) => { const s1 = D1 * D2, s2 = (D1 - E) * (D2 - 2 * E); return s2 >= s1 ? 0 : s1 - s2 } },
+  { id: 'perfil_i',     label: 'Perfil I',          paramLabels: ['Distancia D1', 'Altura D2', 'Espesor E'], compute: ([D1, D2, E]) => { const s1 = D1 * D2, s2 = (D1 - E) * (D2 - 2 * E); return s2 >= s1 ? 0 : s1 - s2 } },
+  { id: 'perfil_t',     label: 'Perfil T',          paramLabels: ['Distancia D1', 'Altura D2', 'Espesor E'], compute: ([D1, D2, E]) => { const s1 = D1 * D2, s2 = (D1 - E) * (D2 - E); return s2 >= s1 ? 0 : s1 - s2 } },
+  {
+    id: 'kgxm', label: 'Kg./m (inverso)',
+    paramLabels: ['Peso específico (Kg./M3.)', 'Peso (Kgs.)', 'Longitud (Mm.)'],
+    paramUnits: ['Kg./M3.', 'Kgs.', 'Mm.'],
+    compute: ([pe, peso, long_]) => (pe * long_ > 0) ? (1e9 * peso) / (pe * long_) : 0,
+  },
 ]
 
-function SectionShapeIcon({ id }: { id: string }) {
-  const s = 36; const c = s / 2; const t = 4
-  switch (id) {
-    case 'round_solid':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><circle cx={c} cy={c} r={14} fill="#6B7280" /></svg>
-    case 'round_hollow':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><circle cx={c} cy={c} r={14} fill="#6B7280" /><circle cx={c} cy={c} r={10} fill="white" /></svg>
-    case 'flat_bar':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={4} y={13} width={28} height={10} fill="#6B7280" rx={1} /></svg>
-    case 'square_solid':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={6} y={6} width={24} height={24} fill="#6B7280" /></svg>
-    case 'square_tube':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={5} y={5} width={26} height={26} fill="#6B7280" /><rect x={5 + t} y={5 + t} width={26 - 2 * t} height={26 - 2 * t} fill="white" /></svg>
-    case 'rect_tube':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={3} y={9} width={30} height={18} fill="#6B7280" /><rect x={3 + t} y={9 + t} width={30 - 2 * t} height={18 - 2 * t} fill="white" /></svg>
-    case 'angle_l':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><polyline points={`7,7 7,29 29,29`} fill="none" stroke="#6B7280" strokeWidth={t} strokeLinecap="square" /></svg>
-    case 'channel_u':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><polyline points={`7,7 7,29 29,29 29,7`} fill="none" stroke="#6B7280" strokeWidth={t} strokeLinecap="square" /></svg>
-    default:
-      return <div className="h-9 w-9 rounded bg-slate-100" />
-  }
+// Real technical drawings (legacy Python system), replacing the hand-drawn SVGs.
+const SECTION_SHAPE_IMAGES: Record<string, string> = {
+  round_solid:  imgRedondo,
+  round_hollow: imgTuboRedondo,
+  flat_bar:     imgCuadrado,
+  rect_tube:    imgTuboCuadrado,
+  angle_l:      imgPerfilL,
+  channel_u:    imgPerfilU,
+  perfil_i:     imgPerfilI,
+  perfil_t:     imgPerfilT,
+  kgxm:         imgKgxm,
+}
+
+function SectionShapeIcon({ id, label }: { id: string; label: string }) {
+  const src = SECTION_SHAPE_IMAGES[id]
+  if (!src) return <div className="h-24 w-24 rounded bg-slate-100" />
+  return <img src={src} alt={label} className="h-24 w-24 object-contain" />
 }
 
 function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
@@ -819,16 +834,16 @@ function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
   return (
     <>
       <p className="mb-2 text-[12px] font-medium text-[#344054]">Cálculo de secciones en Mm2.:</p>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {SECTION_SHAPES.map(shape => (
           <button
             key={shape.id}
             type="button"
             onClick={() => openShape(shape)}
-            className="flex flex-col items-center gap-1.5 rounded-lg border border-[#E4E7EC] bg-white p-2.5 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
+            className="flex flex-col items-center gap-2 rounded-lg border border-[#E4E7EC] bg-white p-4 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
           >
-            <SectionShapeIcon id={shape.id} />
-            <span className="text-[10px] leading-tight text-[#344054]">{shape.label}</span>
+            <SectionShapeIcon id={shape.id} label={shape.label} />
+            <span className="text-xs leading-tight text-[#344054]">{shape.label}</span>
           </button>
         ))}
       </div>
@@ -857,13 +872,15 @@ function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
                     className="flex-1 rounded-lg border border-[#D0D5DD] px-3 py-2 text-[13px] focus:border-[#2C6B2F] focus:outline-none"
                     placeholder="0.000"
                   />
-                  <span className="w-8 text-[12px] text-[#667085]">Mm.</span>
+                  <span className="w-8 text-[12px] text-[#667085]">{active?.paramUnits?.[i] ?? 'Mm.'}</span>
                 </div>
               ))}
             </div>
 
             <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#E4E7EC] bg-[#F9FAFB] px-4 py-3">
-              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#667085]">Sección en Mm2.</span>
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#667085]">
+                {active?.resultLabel ?? 'Sección en Mm2.'}
+              </span>
               <span className="ml-auto font-mono text-[15px] font-bold text-[#111827]">
                 {sectionMm2 != null ? sectionMm2.toFixed(3) : '0.000'}
               </span>
@@ -905,6 +922,7 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
       description:      item?.description ?? '',
       familyId,
       weightMethod:     item?.weightMethod ?? '',
+      manualWeight:     item?.manualWeight ?? false,
       specificWeight:   item?.specificWeight != null ? String(item.specificWeight) : '',
       nominalDimension: item?.nominalDimension != null ? String(item.nominalDimension) : '',
       material:         item?.material ?? '',
@@ -914,6 +932,21 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   })
 
   const weightMethod = watch('weightMethod')
+  const manualWeight = watch('manualWeight')
+
+  const [weightConfigError, setWeightConfigError] = useState<string | null>(null)
+
+  // Mutual exclusion between the 3 weightMethod cards/gallery and the manual-weight card.
+  const chooseWeightMethod = (val: string) => {
+    setValue('weightMethod', val)
+    if (val) setValue('manualWeight', false)
+    if (val) setWeightConfigError(null)
+  }
+  const toggleManualWeight = (checked: boolean) => {
+    setValue('manualWeight', checked)
+    if (checked) setValue('weightMethod', '')
+    if (checked) setWeightConfigError(null)
+  }
 
   // Search state for raw material picker
   const [matSearch, setMatSearch] = useState(item?.material ? `${item.material} — ${item.materialName ?? ''}` : '')
@@ -940,14 +973,23 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   })
 
   const onSubmit = (v: Record<string, string>) => {
+    const isManualWeight = Boolean(v.manualWeight)
+
+    if (!isManualWeight && !v.weightMethod) {
+      setWeightConfigError('Elegí un método de cálculo de peso o marcá "Introducir peso manualmente".')
+      return
+    }
+    setWeightConfigError(null)
+
     m.mutate({
       familyId,
       name:             v.name,
       abbreviation:     v.abbreviation || null,
       description:      v.description || null,
-      weightMethod:     v.weightMethod || null,
-      specificWeight:   v.specificWeight !== '' ? Number(v.specificWeight) : null,
-      nominalDimension: v.nominalDimension !== '' ? Number(v.nominalDimension) : null,
+      weightMethod:     isManualWeight ? null : (v.weightMethod || null),
+      manualWeight:     isManualWeight,
+      specificWeight:   isManualWeight ? null : (v.specificWeight !== '' ? Number(v.specificWeight) : null),
+      nominalDimension: isManualWeight ? null : (v.nominalDimension !== '' ? Number(v.nominalDimension) : null),
       material:         v.material || null,
       materialName:     v.materialName || null,
       operatorName:     v.operatorName || null,
@@ -987,7 +1029,7 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             <input
               type="checkbox"
               checked={['Mm.', 'Mm2.', 'Mm3.'].includes(weightMethod)}
-              onChange={e => setValue('weightMethod', e.target.checked ? 'Mm.' : '')}
+              onChange={e => chooseWeightMethod(e.target.checked ? 'Mm.' : '')}
               className="h-4 w-4 accent-[#2C3E50]"
             />
             <span className="text-[13px] font-semibold text-[#1A1A1A]">
@@ -1007,6 +1049,8 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
                 </FormField>
               </div>
 
+              <MaterialReferenceGallery onSelect={chooseWeightMethod} />
+
               <div>
                 <p className="mb-2 text-[12px] font-medium text-[#344054]">Dimensión específica del material:</p>
                 <div className="flex flex-col gap-2">
@@ -1020,7 +1064,7 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
                         type="radio"
                         name="weightMethodSub"
                         checked={weightMethod === val}
-                        onChange={() => setValue('weightMethod', val)}
+                        onChange={() => chooseWeightMethod(val)}
                         className="mt-0.5 h-4 w-4 accent-[#2C3E50]"
                       />
                       <span className="text-[12px] text-[#344054]">
@@ -1051,7 +1095,7 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             <input
               type="checkbox"
               checked={weightMethod === 'Kg./Und'}
-              onChange={e => setValue('weightMethod', e.target.checked ? 'Kg./Und' : '')}
+              onChange={e => chooseWeightMethod(e.target.checked ? 'Kg./Und' : '')}
               className="h-4 w-4 accent-[#2C3E50]"
             />
             <span className="text-[13px] font-semibold text-[#1A1A1A]">Método 2 [Kg./Item]:</span>
@@ -1067,7 +1111,7 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             <input
               type="checkbox"
               checked={weightMethod === 'Und/Kg.'}
-              onChange={e => setValue('weightMethod', e.target.checked ? 'Und/Kg.' : '')}
+              onChange={e => chooseWeightMethod(e.target.checked ? 'Und/Kg.' : '')}
               className="h-4 w-4 accent-[#2C3E50]"
             />
             <span className="text-[13px] font-semibold text-[#1A1A1A]">Método 3 [Items/Kg.]:</span>
@@ -1076,6 +1120,29 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             </span>
           </label>
         </div>
+
+        {/* Método 4 — peso manual */}
+        <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={manualWeight}
+              onChange={e => toggleManualWeight(e.target.checked)}
+              className="h-4 w-4 accent-[#2C3E50]"
+            />
+            <span className="text-[13px] font-semibold text-[#1A1A1A]">Introducir peso manualmente:</span>
+            <span className="text-[12px] text-[#667085]">
+              El peso de cada ítem de esta clase se carga a mano al crearlo — no se calcula con ninguna fórmula
+            </span>
+          </label>
+        </div>
+
+        {weightConfigError && (
+          <p className="flex items-center gap-1.5 text-[13px] text-red-500">
+            <AlertCircle size={12} strokeWidth={2.5} />
+            {weightConfigError}
+          </p>
+        )}
       </FormSection>
 
       <FormSection title="Materia prima por defecto">
@@ -1633,6 +1700,7 @@ export function CodificacionPage() {
       <FormDialog
         open={sheet === 'item-class'}
         title={editClass ? 'Modificar Clase' : 'Nueva Clase'}
+        width="w-[640px]"
         onClose={() => setSheet(null)}
       >
         {selFam && (
