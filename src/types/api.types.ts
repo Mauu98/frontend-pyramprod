@@ -47,6 +47,7 @@ export interface ItemClass {
   specificWeight: number | null
   nominalDimension: number | null
   weightMethod: WeightMethod | null
+  manualWeight: boolean | null
   materialName: string | null
   operatorName: string | null
 }
@@ -115,6 +116,8 @@ export interface ItemDetail {
   operationComplement: string | null
   functionName: string | null
   weightMethod: WeightMethod | null
+  /** Denormalized from the item's class — present only when the class uses manual weight entry. */
+  manualWeight: boolean | null
 }
 
 // ─── Stock module ─────────────────────────────────────────────────────────────
