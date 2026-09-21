@@ -82,48 +82,78 @@ const GROUPS: { value: MaterialWeightGroup; tabLabel: string; items: MaterialRef
 
 /**
  * Tabbed gallery of reference materials that map onto the three
- * `weightMethod` sub-options (Mm. / Mm2. / Mm3.) of "Método 1".
+ * `weightMethod` sub-options (Mm. / Mm2. / Mm3.).
  * Each tab renders its items as a 3-column grid.
- * Clicking a thumbnail selects the corresponding weight method.
+ *
+ * By default it manages its own active tab and clicking a thumbnail selects
+ * the corresponding weight method. Pass `activeGroup` to control it externally
+ * (hides the tab switcher, locking the gallery to that group) and `selectable={false}`
+ * to render the thumbnails as plain reference images instead of selectable buttons —
+ * used by the "Datos para pesos calculados" wizard's Paso 2, where the mode was already
+ * chosen via radio and the gallery is only "ver imágenes de apoyo", not a picker.
  */
-export function MaterialReferenceGallery({ onSelect }: { onSelect: (method: MaterialWeightGroup) => void }) {
-  const [active, setActive] = useState<MaterialWeightGroup>('Mm.')
+export function MaterialReferenceGallery({
+  onSelect,
+  activeGroup,
+  selectable = true,
+  title = 'Materiales de referencia:',
+}: {
+  onSelect:      (method: MaterialWeightGroup) => void
+  activeGroup?:  MaterialWeightGroup
+  selectable?:   boolean
+  title?:        string
+}) {
+  const [internalActive, setInternalActive] = useState<MaterialWeightGroup>('Mm.')
+  const active = activeGroup ?? internalActive
   const group = GROUPS.find(g => g.value === active) ?? GROUPS[0]
 
   return (
     <div>
-      <p className="mb-2 text-[12px] font-medium text-[#344054]">Materiales de referencia:</p>
+      <p className="mb-2 text-[12px] font-medium text-[#344054]">{title}</p>
 
-      <div className="mb-3 flex gap-1.5">
-        {GROUPS.map(g => (
-          <button
-            key={g.value}
-            type="button"
-            onClick={() => setActive(g.value)}
-            className={cn(
-              'rounded-full px-3 py-1 text-[12px] font-medium transition',
-              active === g.value
-                ? 'bg-[#2C6B2F] text-white'
-                : 'border border-[#E4E7EC] text-[#344054] hover:bg-[#F9FAFB]',
-            )}
-          >
-            {g.tabLabel}
-          </button>
-        ))}
-      </div>
+      {!activeGroup && (
+        <div className="mb-3 flex gap-1.5">
+          {GROUPS.map(g => (
+            <button
+              key={g.value}
+              type="button"
+              onClick={() => setInternalActive(g.value)}
+              className={cn(
+                'rounded-full px-3 py-1 text-[12px] font-medium transition',
+                active === g.value
+                  ? 'bg-[#2C6B2F] text-white'
+                  : 'border border-[#E4E7EC] text-[#344054] hover:bg-[#F9FAFB]',
+              )}
+            >
+              {g.tabLabel}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-[10px]">
         {group.items.map(it => (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onSelect(group.value)}
-            title={it.label}
-            className="flex flex-col items-center gap-2 rounded-lg border border-[#E4E7EC] bg-white p-2 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
-          >
-            <img src={it.src} alt={it.label} className="h-[96px] w-full rounded object-cover" />
-            <span className="text-xs leading-tight text-[#344054]">{it.label}</span>
-          </button>
+          selectable ? (
+            <button
+              key={it.key}
+              type="button"
+              onClick={() => onSelect(group.value)}
+              title={it.label}
+              className="flex flex-col items-center gap-2 rounded-lg border border-[#E4E7EC] bg-white p-2 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
+            >
+              <img src={it.src} alt={it.label} className="h-[96px] w-full rounded object-cover" />
+              <span className="text-xs leading-tight text-[#344054]">{it.label}</span>
+            </button>
+          ) : (
+            <div
+              key={it.key}
+              title={it.label}
+              className="flex flex-col items-center gap-2 rounded-lg border border-[#E4E7EC] bg-white p-2 text-center"
+            >
+              <img src={it.src} alt={it.label} className="h-[96px] w-full rounded object-cover" />
+              <span className="text-xs leading-tight text-[#344054]">{it.label}</span>
+            </div>
+          )
         ))}
       </div>
     </div>
