@@ -12,20 +12,53 @@ import {
 import { FormDialog } from '@/components/ui/form-dialog'
 
 // ─── Weight calculation ───────────────────────────────────────────────────────
-function calcWeight(unit: WeightMethod, sw: number, nd: number, d1: number, d2: number, d3: number): number {
-  const f = (sw * nd) / 1_000_000_000
+// Mirrors ItemWeightCalculator.calculate() server-side (api-pyramprod), which itself
+// replicates the legacy Python pesar() formula (ficha_item.pyw: p_esp*dim1*dim2*dim3).
+// materialDevelopment ("Desarrollo mat.") is a separate tracked/display field — it is
+// NEVER part of the weight formula on the backend, so it must never be sent as dim2/dim3.
+function calcWeight(unit: WeightMethod, sw: number, nd: number, dim2: number, dim3: number): number | null {
+  const protoPeso = unit === 'Mm3.' ? sw : sw * nd
   switch (unit) {
-    case 'Mm.':     return f * d1 * d2
-    case 'Mm2.':    return f * d1
-    case 'Mm3.':    return f * d1 * d2 * d3
-    case 'Kg./Und': return f * d1
-    case 'Und/Kg.': return f * d1
+    case 'Mm.':
+    case 'Mm2.':
+    case 'Mm3.':
+      return (protoPeso * dim2 * dim3) / 1_000_000_000
+    case 'Kg./Und':
+      return protoPeso * dim2 * dim3
+    case 'Und/Kg.': {
+      const divisor = dim2 * dim3
+      return divisor === 0 ? null : protoPeso / divisor
+    }
+  }
+}
+
+// ─── Per-method field mapping ──────────────────────────────────────────────────
+// The form always collects up to 3 raw values (d1/d2/d3), but which ones are real
+// weight-relevant dimensions (dim2/dim3, required by the backend) vs. the separate
+// materialDevelopment field depends on the method. Mm./Kg./Und./Und-Kg. only have ONE
+// real per-item dimension in this model, so dim3 is fixed at 1 (the multiplicative
+// identity) rather than left null — leaving it null is what silently zeroes an item's
+// weight on the next class edit or cascade recalculation (ItemWeightCalculator requires
+// both dim2 and dim3 non-null).
+function mapDims(unit: WeightMethod | null, d1: number, d2: number, d3: number) {
+  switch (unit) {
+    // Mm.: the Class's Constante is already a cross-section AREA (from the section
+    // calculator, whatever the shape — round, flat bar, angle, channel...). The only
+    // thing that varies per item is Largo, so the same value both drives the weight
+    // formula (dim2) and is tracked/displayed as "Desarrollo mat." — Ancho has no
+    // physical meaning here and is not asked for.
+    case 'Mm.':     return { materialDevelopment: d1 || null, dim2: d1 || null, dim3: 1 }
+    case 'Mm2.':    return { materialDevelopment: null,        dim2: d1 || null, dim3: d2 || null }
+    case 'Mm3.':    return { materialDevelopment: d1 || null, dim2: d2 || null, dim3: d3 || null }
+    case 'Kg./Und': return { materialDevelopment: null,        dim2: d1 || null, dim3: 1 }
+    case 'Und/Kg.': return { materialDevelopment: null,        dim2: d1 || null, dim3: 1 }
+    default:        return { materialDevelopment: d1 || null, dim2: d2 || null, dim3: d3 || null }
   }
 }
 
 // ─── Name auto-composer ───────────────────────────────────────────────────────
 function composeName(matName: string, d1: number, d2: number, d3: number, unit: WeightMethod | null, opName: string, complement: string, fn: string): string {
-  const dim = !unit ? '' : unit === 'Mm.' ? `${d1}x${d2}` : unit === 'Mm3.' ? `${d1}x${d2}x${d3}` : `${d1}`
+  const dim = !unit ? '' : unit === 'Mm3.' ? `${d1}x${d2}x${d3}` : unit === 'Mm2.' ? `${d1}x${d2}` : `${d1}`
   return [matName, dim, opName, complement ? `[${complement}]` : '', fn].filter(Boolean).join(' ').slice(0, 145)
 }
 
@@ -96,14 +129,18 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
   const d3 = parseFloat(watched.d3 || '0') || 0
   const unit = itemType.weightMethod
 
+  const mapped = mapDims(unit, d1, d2, d3)
+
   const weight = useMemo(() => {
     if (itemType.manualWeight) {
       const w = parseFloat(watched.weightInput || '')
       return isNaN(w) ? null : w
     }
-    if (!unit || !itemType.specificWeight || !itemType.nominalDimension) return null
-    return calcWeight(unit, itemType.specificWeight, itemType.nominalDimension, d1, d2, d3)
-  }, [unit, itemType, d1, d2, d3, watched.weightInput])
+    if (!unit || !itemType.specificWeight) return null
+    if (unit !== 'Mm3.' && !itemType.nominalDimension) return null
+    if (mapped.dim2 == null || mapped.dim3 == null) return null
+    return calcWeight(unit, itemType.specificWeight, itemType.nominalDimension ?? 0, mapped.dim2, mapped.dim3)
+  }, [unit, itemType, mapped.dim2, mapped.dim3, watched.weightInput])
 
   const previewName = useMemo(() =>
     composeName(matName, d1, d2, d3, unit, itemType.operatorName ?? '', watched.complement ?? '', watched.func ?? ''),
@@ -115,12 +152,16 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
     onSuccess: item => { qc.invalidateQueries({ queryKey: ['items', itemType.id] }); onSave(item) },
   })
 
-  const needD2 = unit === 'Mm.' || unit === 'Mm2.' || unit === 'Mm3.'
+  // Mm. only has one real per-item dimension (Largo) — the class already fixes the
+  // cross-section area, so there's no second field to ask for. Kg./Und and Und/Kg. are
+  // likewise single-value. Only Mm2. (2 free dims) and Mm3. (3) need more than one field.
+  const needD2 = unit === 'Mm2.' || unit === 'Mm3.'
   const needD3 = unit === 'Mm3.'
   const d1Label: Record<WeightMethod, string> = {
-    'Mm.': 'Largo (mm)', 'Mm2.': 'Área (mm²)', 'Mm3.': 'Largo (mm)',
+    'Mm.': 'Largo (mm)', 'Mm2.': 'Ancho (mm)', 'Mm3.': 'Largo (mm)',
     'Kg./Und': 'Peso/pieza (kg)', 'Und/Kg.': 'Piezas/kg',
   }
+  const d2Label = unit === 'Mm2.' ? 'Largo (mm)' : unit === 'Mm3.' ? 'Alto (mm)' : 'Dim 2'
 
   const onSubmit = (v: FormValues) => {
     if (requiresMaterial && !matCode) return
@@ -129,11 +170,11 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
       // fullName is composed server-side — not sent from client
       functionName:        v.func || null,
       material:            requiresMaterial ? (matCode || null) : null,
-      materialDevelopment: d1 || null,
+      materialDevelopment: mapped.materialDevelopment,
       unitConsumption:     unit ?? 'Und',
       unitPurchase:        'Und',
-      dim2:                d2 || null,
-      dim3:                d3 || null,
+      dim2:                mapped.dim2,
+      dim3:                mapped.dim3,
       weight:              weight ?? null,
       operationComplement: v.complement || null,
     })
@@ -172,19 +213,21 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
                   <span className="text-[13px] text-[#555555]">Método: <strong>{unit}</strong></span>
                 </div>
               )}
-              <div className={cn('grid gap-4', needD3 ? 'grid-cols-3' : needD2 ? 'grid-cols-2' : 'grid-cols-2')}>
+              <div className={cn('grid gap-4', needD3 ? 'grid-cols-3' : needD2 ? 'grid-cols-2' : 'grid-cols-1')}>
                 <FormField label={unit ? d1Label[unit] : 'Desarrollo / dim1'} optional>
                   <input type="number" step="0.001" min="0" placeholder="0.000"
                     {...register('d1')}
                     className={inputBase}
                   />
                 </FormField>
-                <FormField label={unit === 'Mm.' ? 'Ancho (mm)' : unit === 'Mm3.' ? 'Alto (mm)' : 'Dim 2'} optional>
+                {needD2 && (
+                <FormField label={d2Label} optional>
                   <input type="number" step="0.001" min="0" placeholder="0.000"
                     {...register('d2')}
                     className={inputBase}
                   />
                 </FormField>
+                )}
                 {needD3 && (
                   <FormField label="Espesor (mm)" optional>
                     <input type="number" step="0.001" min="0" placeholder="0.000"
