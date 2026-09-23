@@ -12,13 +12,23 @@ import {
 } from '@/components/ui/form-field'
 import type { Segment, Family, ItemClass, ItemSummary, ItemDetail } from '@/types/api.types'
 import { NewItemForm } from '@/components/catalog/NewItemForm'
+import { MaterialReferenceGallery } from '@/components/catalog/MaterialReferenceGallery'
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
-  AlertTriangle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
+  AlertTriangle, AlertCircle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
   FileSpreadsheet, ArrowDownUp,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import imgRedondo from '@/assets/materials/redondo.png'
+import imgTuboRedondo from '@/assets/materials/tubo_redondo.png'
+import imgCuadrado from '@/assets/materials/cuadrado.png'
+import imgTuboCuadrado from '@/assets/materials/tubo_cuadrado.png'
+import imgPerfilL from '@/assets/materials/perfil_l.png'
+import imgPerfilU from '@/assets/materials/perfil_u.png'
+import imgPerfilI from '@/assets/materials/perfil_i.png'
+import imgPerfilT from '@/assets/materials/perfil_t.png'
+import imgKgxm from '@/assets/materials/kgxm.png'
 
 type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | 'family-batch' | 'class-batch' | 'copy-to-family' | null
 interface ColRow { id: number; code: string; name: string }
@@ -761,41 +771,46 @@ type SectionShape = {
   label: string
   paramLabels: string[]
   compute: (vals: number[]) => number
+  /** Label for the result row. Defaults to "Sección en Mm2." when omitted. */
+  resultLabel?: string
+  /** Unit shown next to each param input. Defaults to "Mm." for every field when omitted. */
+  paramUnits?: string[]
 }
 
 const SECTION_SHAPES: SectionShape[] = [
   { id: 'round_solid',  label: 'Barra redonda',    paramLabels: ['Diámetro D'],                   compute: ([D])          => Math.PI * D * D / 4 },
   { id: 'round_hollow', label: 'Caño redondo',      paramLabels: ['Diámetro ext.', 'Diámetro int.'], compute: ([De, Di])     => Math.PI * (De * De - Di * Di) / 4 },
   { id: 'flat_bar',     label: 'Planchuela',        paramLabels: ['Ancho', 'Espesor'],             compute: ([A, B])        => A * B },
-  { id: 'square_solid', label: 'Barra cuadrada',    paramLabels: ['Lado L'],                       compute: ([L])           => L * L },
-  { id: 'square_tube',  label: 'Tubo cuadrado',     paramLabels: ['Lado ext.', 'Espesor'],         compute: ([L, e])        => L * L - (L - 2 * e) * (L - 2 * e) },
   { id: 'rect_tube',    label: 'Tubo rectangular',  paramLabels: ['Lado A', 'Lado B', 'Espesor'],  compute: ([A, B, e])     => A * B - (A - 2 * e) * (B - 2 * e) },
   { id: 'angle_l',      label: 'Perfil L',          paramLabels: ['Ala A', 'Ala B', 'Espesor'],   compute: ([A, B, e])     => (A + B - e) * e },
-  { id: 'channel_u',    label: 'Perfil U/C',        paramLabels: ['Alto H', 'Ancho B', 'Espesor'], compute: ([H, B, e])     => H * e + 2 * (B - e) * e },
+  { id: 'channel_u',    label: 'Perfil U/C',        paramLabels: ['Distancia D1', 'Altura D2', 'Espesor E'], compute: ([D1, D2, E]) => { const s1 = D1 * D2, s2 = (D1 - E) * (D2 - 2 * E); return s2 >= s1 ? 0 : s1 - s2 } },
+  { id: 'perfil_i',     label: 'Perfil I',          paramLabels: ['Distancia D1', 'Altura D2', 'Espesor E'], compute: ([D1, D2, E]) => { const s1 = D1 * D2, s2 = (D1 - E) * (D2 - 2 * E); return s2 >= s1 ? 0 : s1 - s2 } },
+  { id: 'perfil_t',     label: 'Perfil T',          paramLabels: ['Distancia D1', 'Altura D2', 'Espesor E'], compute: ([D1, D2, E]) => { const s1 = D1 * D2, s2 = (D1 - E) * (D2 - E); return s2 >= s1 ? 0 : s1 - s2 } },
+  {
+    id: 'kgxm', label: 'Kg./m (inverso)',
+    paramLabels: ['Peso específico (Kg./M3.)', 'Peso (Kgs.)', 'Longitud (Mm.)'],
+    paramUnits: ['Kg./M3.', 'Kgs.', 'Mm.'],
+    compute: ([pe, peso, long_]) => (pe * long_ > 0) ? (1e9 * peso) / (pe * long_) : 0,
+  },
 ]
 
-function SectionShapeIcon({ id }: { id: string }) {
-  const s = 36; const c = s / 2; const t = 4
-  switch (id) {
-    case 'round_solid':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><circle cx={c} cy={c} r={14} fill="#6B7280" /></svg>
-    case 'round_hollow':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><circle cx={c} cy={c} r={14} fill="#6B7280" /><circle cx={c} cy={c} r={10} fill="white" /></svg>
-    case 'flat_bar':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={4} y={13} width={28} height={10} fill="#6B7280" rx={1} /></svg>
-    case 'square_solid':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={6} y={6} width={24} height={24} fill="#6B7280" /></svg>
-    case 'square_tube':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={5} y={5} width={26} height={26} fill="#6B7280" /><rect x={5 + t} y={5 + t} width={26 - 2 * t} height={26 - 2 * t} fill="white" /></svg>
-    case 'rect_tube':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><rect x={3} y={9} width={30} height={18} fill="#6B7280" /><rect x={3 + t} y={9 + t} width={30 - 2 * t} height={18 - 2 * t} fill="white" /></svg>
-    case 'angle_l':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><polyline points={`7,7 7,29 29,29`} fill="none" stroke="#6B7280" strokeWidth={t} strokeLinecap="square" /></svg>
-    case 'channel_u':
-      return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><polyline points={`7,7 7,29 29,29 29,7`} fill="none" stroke="#6B7280" strokeWidth={t} strokeLinecap="square" /></svg>
-    default:
-      return <div className="h-9 w-9 rounded bg-slate-100" />
-  }
+// Real technical drawings (legacy Python system), replacing the hand-drawn SVGs.
+const SECTION_SHAPE_IMAGES: Record<string, string> = {
+  round_solid:  imgRedondo,
+  round_hollow: imgTuboRedondo,
+  flat_bar:     imgCuadrado,
+  rect_tube:    imgTuboCuadrado,
+  angle_l:      imgPerfilL,
+  channel_u:    imgPerfilU,
+  perfil_i:     imgPerfilI,
+  perfil_t:     imgPerfilT,
+  kgxm:         imgKgxm,
+}
+
+function SectionShapeIcon({ id, label }: { id: string; label: string }) {
+  const src = SECTION_SHAPE_IMAGES[id]
+  if (!src) return <div className="h-24 w-24 rounded bg-slate-100" />
+  return <img src={src} alt={label} className="h-24 w-24 object-contain" />
 }
 
 function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
@@ -819,16 +834,16 @@ function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
   return (
     <>
       <p className="mb-2 text-[12px] font-medium text-[#344054]">Cálculo de secciones en Mm2.:</p>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {SECTION_SHAPES.map(shape => (
           <button
             key={shape.id}
             type="button"
             onClick={() => openShape(shape)}
-            className="flex flex-col items-center gap-1.5 rounded-lg border border-[#E4E7EC] bg-white p-2.5 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
+            className="flex flex-col items-center gap-2 rounded-lg border border-[#E4E7EC] bg-white p-4 text-center transition hover:border-[#2C6B2F]/40 hover:bg-[#2C6B2F]/5 active:scale-95"
           >
-            <SectionShapeIcon id={shape.id} />
-            <span className="text-[10px] leading-tight text-[#344054]">{shape.label}</span>
+            <SectionShapeIcon id={shape.id} label={shape.label} />
+            <span className="text-xs leading-tight text-[#344054]">{shape.label}</span>
           </button>
         ))}
       </div>
@@ -857,13 +872,15 @@ function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
                     className="flex-1 rounded-lg border border-[#D0D5DD] px-3 py-2 text-[13px] focus:border-[#2C6B2F] focus:outline-none"
                     placeholder="0.000"
                   />
-                  <span className="w-8 text-[12px] text-[#667085]">Mm.</span>
+                  <span className="w-8 text-[12px] text-[#667085]">{active?.paramUnits?.[i] ?? 'Mm.'}</span>
                 </div>
               ))}
             </div>
 
             <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#E4E7EC] bg-[#F9FAFB] px-4 py-3">
-              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#667085]">Sección en Mm2.</span>
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#667085]">
+                {active?.resultLabel ?? 'Sección en Mm2.'}
+              </span>
               <span className="ml-auto font-mono text-[15px] font-bold text-[#111827]">
                 {sectionMm2 != null ? sectionMm2.toFixed(3) : '0.000'}
               </span>
@@ -893,6 +910,261 @@ function SectionCalculator({ onCopy }: { onCopy: (value: number) => void }) {
   )
 }
 
+// ─── Weight wizard (Datos para pesos calculados) ─────────────────────────────
+// Popup wizard ported 1:1 from the approved mockup (Artifact c8ad7ca9-886d-423b-ad2e-8b29fec4ea5b,
+// v19 — Walter Oncativo approval round, 2026-09-16/17). Replaces the old always-expanded
+// Método 1/2/3/Manual cards. Método 2 [Kg./Item] / Método 3 [Items/Kg.] were dropped entirely:
+// they were already broken in production (no fields of their own, backend rejects them) and are
+// not part of the approved design — the legacy source (peso_calc_2.ui/set_peso_calc.pyw) only
+// ever models Fórmula (Kg./M3.) vs Manual.
+type DimMode = 'Mm.' | 'Mm2.' | 'Mm3.'
+
+const DIM_CROSS_MAP: Record<DimMode, DimMode> = { 'Mm.': 'Mm2.', 'Mm2.': 'Mm.', 'Mm3.': 'Mm3.' }
+
+const DIM_OPTS: [DimMode, string][] = [
+  ['Mm.', 'El Material Se Va A Consumir En Función De Un Largo De Corte En Mm.'],
+  ['Mm2.', 'El Material Se Va A Consumir En Función De Una Región De Corte En Mm2.'],
+  ['Mm3.', 'El Material Se Va A Consumir En Función De Porciones Volumétricas (Fijas) En Mm3.'],
+]
+
+// Texto dictado por Walter Oncativo en la ronda de aprobación (WhatsApp, 2026-09-16) — reemplaza
+// el párrafo largo copiado literal del legacy como redacción principal.
+const DIM_HELP_TEXT: Record<DimMode, string> = {
+  'Mm.': 'Dado que el material se va a consumir en función de un largo de corte en Mm. es requerido en este paso estipular la sección constante del material, en Mm2.',
+  'Mm2.': 'Dado que el material se va a consumir en función de una región de corte en Mm2. es requerido en este paso estipular el espesor constante del material, en Mm.',
+  'Mm3.': 'Dado que el material se va a consumir en función de porciones volumétricas fijas, en este paso por defecto el Sistema asigna 1 como factor dimensional y las 3 dimensiones del artículo se proveerán en el siguiente paso de la codificación.',
+}
+
+// Párrafo legacy original, verbatim (set_peso_calc.pyw:540-592, "pretext"), typos auténticos
+// incluidos ("tranversal", "Esto materiales") — se muestra debajo del texto de Walter, no lo reemplaza.
+const DIM_LEGACY_TEXT: Record<DimMode, string[]> = {
+  'Mm.': [
+    'Caso típico para materiales en barra (ver imágenes en combo) donde su corte, por lo general, será tranversal a su desarrollo longitudinal. El plano de la intersección de corte dejará visible la geometría de sección uniforme que siempre presenta el material, a lo largo de todo su desarrollo. En este paso de la codificación, la magnitud de esta sección constante del material es la que debe imputarse, en Mm2.',
+    'Para evitar el uso de tablas, el Sistema provee el cálculo de secciones geométricas más frecuentes en la industria, clicando debajo alguna de las imágenes.',
+    'Queda pendiente para el último paso de la codificación, estipular largo estándar variable en Mm. que va a presentar el material, en cada artículo que vaya a crearse con esta clase. Se aplica el término variable para indicar que el largo estándar podrá variar entre diferentes artículos.',
+  ],
+  'Mm2.': [
+    'Caso típico de materiales planos (ver imágenes en combo) que presentan dos dimensiones mayores que pueden expresarse en medidas de ancho y largo que forman la superficie del plano, más una dimensión mucho menor, que indica el espesor uniforme de dicho plano.',
+    'Esto materiales se consumen preferentemente en regiones de corte menores que quepan dentro de la superficie plana del material. Todas las regiones menores a cortar tendrán en común el espesor de material, pudiendo variar en sus anchos y largos respectivos.',
+    'En este paso de la codificación, este espesor constante del material es el que debe imputarse, en Mm.',
+    'Queda pendiente en el último paso de la codificación, estipular el largo estándar variable en Mm. y el ancho estándar variable en Mm. que va a presentar cada artículo creado con esta clase.',
+    'Se aplica el término variable para indicar que el largo o el ancho estándar, podrán variar entre diferentes artículos.',
+  ],
+  'Mm3.': [
+    'Caso típico de materiales sólidos de volumen fijo a consumir por unidades o de materiales no sólidos, blandos y dúctiles que deban ser contenidos en recipientes para ser fraccionados en porciones volumétricas fijas (ver imágenes en combo).',
+    'Esto materiales presentan tres dimensiones fijas dependientes de la geometría del cuerpo sólido o del recipiente contenedor.',
+    'En este paso de la codificación, al no existir una dimensión fija sino 3, el Sistema imputa el valor 1 como dato matemático para luego factorizar las 3 dimensiones de cada cuerpo o recipiente para determinar su peso.',
+    'Queda pendiente en el último paso de la codificación, estipular el largo estándar variable en Mm., el ancho estándar variable en Mm. y el alto estándar variable en Mm. del recipiente que va a presentar cada artículo creado con esta clase.',
+    'Se aplica el término variable para indicar que el largo o el ancho o el alto estándar, podrán variar entre diferentes artículos.',
+  ],
+}
+
+// "Factor Dimensional Constante" es el término corregido por Walter Oncativo (ronda de aprobación,
+// 2026-09-16) — reemplaza el guess anterior "Dimensión o Producto Dimensional Constante" (sacado
+// de panta_catego_2.ui, una pantalla distinta). La línea de abajo es la caption dependiente del
+// modo (legacy label_13 en set_peso_calc.pyw), separada del label principal.
+const CONST_LABEL: Record<DimMode, string> = {
+  'Mm.': 'Valor Fijo De La Sección Uniforme De Corte Transversal Del Material, Expresado En Mm2.',
+  'Mm2.': 'Valor Fijo Del Espesor Uniforme De Corte Transversal Del Material, Expresado En Mm.',
+  'Mm3.': 'Valor Fijo Del Volumen Del Material, Expresado En Mm3.',
+}
+
+type WizardStep = 'gate' | 'coef-value' | 'dimension' | 'constante'
+const WIZARD_STEPS: WizardStep[] = ['gate', 'coef-value', 'dimension', 'constante']
+
+function WeightWizardDialog({
+  open, onClose, weightMethod, specificWeight, nominalDimension, manualWeight,
+  onConfirmFormula, onConfirmManual,
+}: {
+  open:             boolean
+  onClose:          () => void
+  weightMethod:     string
+  specificWeight:   string
+  nominalDimension: string
+  manualWeight:     boolean
+  onConfirmFormula: (v: { dimMode: DimMode; coefValue: string; constante: string }) => void
+  onConfirmManual:  () => void
+}) {
+  // The parent only mounts this component while `open` is true (see call site), so every open
+  // is a fresh mount — the draft state below can just seed itself once from the real form values
+  // (matches the mockup's `openWizard()` pre-loading `saved` into `state`) instead of resetting
+  // via an effect on every close→open transition.
+  const [step, setStep] = useState<WizardStep>('gate')
+  const [mode, setMode] = useState<'formula' | 'manual' | ''>(manualWeight ? 'manual' : weightMethod ? 'formula' : '')
+  const [coefValue, setCoefValue] = useState(manualWeight ? '' : specificWeight)
+  // Only 3 of the 5 legacy weightMethod values are valid wizard dim-modes — an ItemClass still
+  // carrying a pre-wizard 'Kg./Und'/'Und/Kg.' value must fall back to '' so the user is forced to
+  // pick one of the 3 real options, instead of silently re-saving the stale value.
+  const initialDimMode: DimMode | '' =
+    manualWeight || !weightMethod ? '' : DIM_OPTS.some(([v]) => v === weightMethod) ? (weightMethod as DimMode) : ''
+  const [dimMode, setDimMode] = useState<DimMode | ''>(initialDimMode)
+  // Mm3. has no free dimension (son 3) — the constant is always 1, so an existing Mm3. class must
+  // seed the field already locked, not just when the radio is clicked in this same session.
+  const [constante, setConstante] = useState(
+    manualWeight ? '' : initialDimMode === 'Mm3.' ? '1.00000000' : nominalDimension,
+  )
+
+  // Mm3. lock: no existe una dimensión fija (son 3), el Sistema fija este valor en 1 — se aplica
+  // en el mismo evento que cambia de modo, no en un effect separado.
+  const selectDimMode = (val: DimMode) => {
+    setDimMode(val)
+    if (val === 'Mm3.') setConstante('1.00000000')
+  }
+
+  const stepIndex = WIZARD_STEPS.indexOf(step)
+  const totalSteps = WIZARD_STEPS.length
+
+  const title =
+    step === 'gate'        ? 'Datos Para Pesos Calculados'
+    : step === 'coef-value' ? `Paso ${stepIndex} de ${totalSteps} — Peso específico`
+    : step === 'dimension'  ? `Paso ${stepIndex} de ${totalSteps} — Modalidad de Consumo`
+    :                          `Paso ${stepIndex} de ${totalSteps} — Factor Dimensional Constante`
+
+  const handleGateNext = () => {
+    if (mode === 'manual') { onConfirmManual(); onClose(); return }
+    setStep('coef-value')
+  }
+  const handleFinish = () => {
+    if (!dimMode) return
+    onConfirmFormula({ dimMode, coefValue, constante })
+    onClose()
+  }
+
+  const navRow = (back: (() => void) | null, next: { label: string; disabled: boolean; onClick: () => void }) => (
+    <div className="mt-6 flex items-center justify-between border-t border-[#F2F4F7] pt-5">
+      <button
+        type="button"
+        onClick={back ?? onClose}
+        className="text-[14px] font-medium text-[#667085] transition hover:text-[#344054]"
+      >
+        {back ? 'Volver' : 'Cancelar'}
+      </button>
+      <button
+        type="button"
+        disabled={next.disabled}
+        onClick={next.onClick}
+        className="flex h-11 items-center justify-center rounded-lg bg-[#2C6B2F] px-6 text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#245A27] active:bg-[#1E4B21] disabled:opacity-50"
+      >
+        {next.label}
+      </button>
+    </div>
+  )
+
+  return (
+    <FormDialog open={open} title={title} onClose={onClose} width="w-[620px]">
+      {step !== 'gate' && (
+        <div className="mb-5 flex gap-1.5">
+          {WIZARD_STEPS.slice(1).map((s, i) => (
+            <span key={s} className={cn(
+              'h-1.5 w-1.5 rounded-full',
+              i < stepIndex - 1 ? 'bg-[#2C6B2F]/40' : i === stepIndex - 1 ? 'bg-[#2C6B2F]' : 'bg-[#E4E7EC]',
+            )} />
+          ))}
+        </div>
+      )}
+
+      {step === 'gate' && (
+        <>
+          <div className="flex flex-col gap-3">
+            {([
+              ['formula', 'Establecer Peso Por Fórmula', 'El peso se calcula a partir de un coeficiente y las dimensiones del ítem'],
+              ['manual', 'Introducir Peso Manualmente Artículo Por Artículo', 'Cada ítem de esta clase carga su peso a mano al crearse'],
+            ] as const).map(([val, opt, desc]) => (
+              <label key={val} className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition',
+                mode === val ? 'border-[#2C6B2F] bg-[#2C6B2F]/5' : 'border-[#E4E7EC] hover:border-[#D0D5DD]',
+              )}>
+                <input type="radio" name="wizGate" checked={mode === val} onChange={() => setMode(val)}
+                  className="mt-0.5 h-4 w-4 accent-[#2C6B2F]" />
+                <div>
+                  <div className="text-[13.5px] font-semibold text-[#101828]">{opt}</div>
+                  <div className="mt-0.5 text-[12px] text-[#667085]">{desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          {navRow(null, { label: mode === 'manual' ? 'Aceptar' : 'Continuar', disabled: !mode, onClick: handleGateNext })}
+        </>
+      )}
+
+      {step === 'coef-value' && (
+        <>
+          <div className="flex items-center gap-3">
+            <input
+              type="number" step="0.00000001" value={coefValue}
+              onChange={e => setCoefValue(e.target.value)}
+              placeholder="0,00000000"
+              className={cn(inputBase, 'w-[220px]')}
+            />
+            <span className="text-[12px] text-[#667085]">(Indicar Peso Específico En Kg./M3.)</span>
+          </div>
+          {navRow(() => setStep('gate'), { label: 'Continuar', disabled: !coefValue, onClick: () => setStep('dimension') })}
+        </>
+      )}
+
+      {step === 'dimension' && (
+        <>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-[1.15fr_0.85fr]">
+            <div>
+              <div className="flex flex-col gap-2">
+                {DIM_OPTS.map(([val, desc]) => (
+                  <label key={val} className="flex cursor-pointer items-start gap-2.5">
+                    <input type="radio" name="wizDim" checked={dimMode === val} onChange={() => selectDimMode(val)}
+                      className="mt-0.5 h-4 w-4 accent-[#2C6B2F]" />
+                    <span className="text-[12px] text-[#344054]">{desc}</span>
+                  </label>
+                ))}
+              </div>
+              {dimMode && (
+                <div className="mt-4">
+                  <MaterialReferenceGallery
+                    onSelect={() => undefined}
+                    activeGroup={dimMode}
+                    selectable={false}
+                    title="Materiales de referencia del método seleccionado (ver imágenes de apoyo):"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg border border-[#E4E7EC] bg-[#F9FAFB] p-3.5 text-[11.5px] leading-relaxed text-[#667085]">
+              {dimMode ? DIM_HELP_TEXT[dimMode] : 'Elegí una de las 3 opciones para ver el detalle.'}
+              {dimMode && DIM_LEGACY_TEXT[dimMode].map((p, i) => (
+                <p key={i} className="mt-2.5">{p}</p>
+              ))}
+            </div>
+          </div>
+          {navRow(() => setStep('coef-value'), { label: 'Continuar', disabled: !dimMode, onClick: () => setStep('constante') })}
+        </>
+      )}
+
+      {step === 'constante' && dimMode && (
+        <>
+          <label className="mb-1 block text-[12.5px] font-semibold text-[#344054]">Factor Dimensional Constante:</label>
+          <p className="mb-2.5 text-[11.5px] text-[#98A2B3]">{CONST_LABEL[dimMode]}</p>
+          <input
+            type="number" step="0.00000001" value={constante}
+            disabled={dimMode === 'Mm3.'}
+            onChange={e => setConstante(e.target.value)}
+            placeholder="0,00000000"
+            className={cn(inputBase, 'w-[220px]', dimMode === 'Mm3.' && 'cursor-not-allowed bg-[#F2F4F7] text-[#98A2B3]')}
+          />
+          {dimMode === 'Mm3.' && (
+            <p className="mt-1.5 text-[11.5px] text-[#98A2B3]">
+              Al no existir una dimensión fija (son 3), el Sistema fija este valor en 1 para luego factorizar las 3 dimensiones del cuerpo o recipiente en el último paso.
+            </p>
+          )}
+          {dimMode === 'Mm.' && (
+            <div className="mt-5">
+              <SectionCalculator onCopy={v => setConstante(v.toFixed(6))} />
+            </div>
+          )}
+          {navRow(() => setStep('dimension'), { label: 'Aceptar', disabled: !constante, onClick: handleFinish })}
+        </>
+      )}
+    </FormDialog>
+  )
+}
+
 // ─── Item class form ──────────────────────────────────────────────────────────
 function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   item: ItemClass | null; familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
@@ -905,6 +1177,7 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
       description:      item?.description ?? '',
       familyId,
       weightMethod:     item?.weightMethod ?? '',
+      manualWeight:     item?.manualWeight ?? false,
       specificWeight:   item?.specificWeight != null ? String(item.specificWeight) : '',
       nominalDimension: item?.nominalDimension != null ? String(item.nominalDimension) : '',
       material:         item?.material ?? '',
@@ -914,6 +1187,24 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   })
 
   const weightMethod = watch('weightMethod')
+  const manualWeight = watch('manualWeight')
+  const specificWeight = watch('specificWeight')
+  const nominalDimension = watch('nominalDimension')
+
+  const [weightConfigError, setWeightConfigError] = useState<string | null>(null)
+  const [weightWizardOpen, setWeightWizardOpen] = useState(false)
+
+  // Mutual exclusion between the 3 weightMethod cards/gallery and the manual-weight card.
+  const chooseWeightMethod = (val: string) => {
+    setValue('weightMethod', val)
+    if (val) setValue('manualWeight', false)
+    if (val) setWeightConfigError(null)
+  }
+  const toggleManualWeight = (checked: boolean) => {
+    setValue('manualWeight', checked)
+    if (checked) setValue('weightMethod', '')
+    if (checked) setWeightConfigError(null)
+  }
 
   // Search state for raw material picker
   const [matSearch, setMatSearch] = useState(item?.material ? `${item.material} — ${item.materialName ?? ''}` : '')
@@ -940,14 +1231,23 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   })
 
   const onSubmit = (v: Record<string, string>) => {
+    const isManualWeight = Boolean(v.manualWeight)
+
+    if (!isManualWeight && !v.weightMethod) {
+      setWeightConfigError('Elegí un método de cálculo de peso o marcá "Introducir peso manualmente".')
+      return
+    }
+    setWeightConfigError(null)
+
     m.mutate({
       familyId,
       name:             v.name,
       abbreviation:     v.abbreviation || null,
       description:      v.description || null,
-      weightMethod:     v.weightMethod || null,
-      specificWeight:   v.specificWeight !== '' ? Number(v.specificWeight) : null,
-      nominalDimension: v.nominalDimension !== '' ? Number(v.nominalDimension) : null,
+      weightMethod:     isManualWeight ? null : (v.weightMethod || null),
+      manualWeight:     isManualWeight,
+      specificWeight:   isManualWeight ? null : (v.specificWeight !== '' ? Number(v.specificWeight) : null),
+      nominalDimension: isManualWeight ? null : (v.nominalDimension !== '' ? Number(v.nominalDimension) : null),
       material:         v.material || null,
       materialName:     v.materialName || null,
       operatorName:     v.operatorName || null,
@@ -967,115 +1267,92 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             placeholder='Ej: PLA SAE1010 1"x1/8"'
           />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Abreviatura" optional>
-            <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
-          </FormField>
-          <FormField label="Operador / proceso" optional helper="Ej: galvanizado, pintado">
-            <input {...register('operatorName')} maxLength={45} className={inputBase} placeholder="Ej: galvanizado" />
-          </FormField>
-        </div>
+        <FormField label="Abreviatura" optional>
+          <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
+        </FormField>
         <FormField label="Descripción" optional>
           <textarea {...register('description')} rows={2} className={textareaBase} />
         </FormField>
       </FormSection>
 
       <FormSection title="Datos para pesos calculados">
-        {/* Método 1 — Kg./M3. (volumétrico por peso específico) */}
         <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
-          <label className="flex cursor-pointer items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={['Mm.', 'Mm2.', 'Mm3.'].includes(weightMethod)}
-              onChange={e => setValue('weightMethod', e.target.checked ? 'Mm.' : '')}
-              className="h-4 w-4 accent-[#2C3E50]"
-            />
-            <span className="text-[13px] font-semibold text-[#1A1A1A]">
-              Método 1 [Kg./M3.]:
-            </span>
-            <span className="text-[12px] text-[#667085]">
-              Se conoce el peso específico del material de esta clase
-            </span>
-          </label>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setWeightWizardOpen(true)}
+              className="h-10 shrink-0 rounded-lg bg-[#2C6B2F] px-4 text-[13px] font-semibold text-white transition hover:bg-[#245A27] active:bg-[#1E4B21]"
+            >
+              Métodos Peso Calculado
+            </button>
+            {!manualWeight && !weightMethod && (
+              <span className="text-[12.5px] text-[#98A2B3]">Sin configurar todavía</span>
+            )}
+            {manualWeight && (
+              <span className="text-[12.5px] text-[#98A2B3]">Peso manual por ítem</span>
+            )}
+          </div>
 
-          {['Mm.', 'Mm2.', 'Mm3.'].includes(weightMethod) && (
-            <div className="mt-4 flex flex-col gap-4 pl-6">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="Valor peso específico (Kg./M3.)" optional>
-                  <input type="number" step="0.00000001" {...register('specificWeight')}
-                    className={inputBase} placeholder="0,00000000" />
-                </FormField>
+          {!manualWeight && weightMethod && (
+            <div className="mt-4 flex flex-col gap-3 border-t border-[#E4E7EC] pt-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[12.5px] font-semibold text-[#344054]">Coef. Especif.:</span>
+                <span className="rounded border border-[#D0D5DD] bg-white px-2.5 py-1 font-mono text-[13px] text-[#101828]">
+                  {specificWeight ? Number(specificWeight).toFixed(8).replace('.', ',') : '—'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#1A1A1A]">
+                  <span className="inline-block h-[13px] w-[13px] rounded-sm bg-[#2C6B2F]" />
+                  Kg./M3.
+                </span>
               </div>
-
-              <div>
-                <p className="mb-2 text-[12px] font-medium text-[#344054]">Dimensión específica del material:</p>
-                <div className="flex flex-col gap-2">
-                  {([
-                    ['Mm.', 'Para materiales que permitirán trozado y formen piezas que tendrán mismo espesor (Superficie Variable)'],
-                    ['Mm2.', 'Para materiales que permitirán trozado y formen piezas que tendrán misma sección (Longitud Variable)'],
-                    ['Mm3.', 'Para materiales que NO permitirán trozado y formen piezas que tendrán volumen fijo'],
-                  ] as const).map(([val, desc]) => (
-                    <label key={val} className="flex cursor-pointer items-start gap-2.5">
-                      <input
-                        type="radio"
-                        name="weightMethodSub"
-                        checked={weightMethod === val}
-                        onChange={() => setValue('weightMethod', val)}
-                        className="mt-0.5 h-4 w-4 accent-[#2C3E50]"
-                      />
-                      <span className="text-[12px] text-[#344054]">
-                        <strong>{val}</strong>: {desc}
-                      </span>
-                    </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[12.5px] font-semibold text-[#344054]">Factor Dimensional Constante:</span>
+                <span className="rounded border border-[#D0D5DD] bg-white px-2.5 py-1 font-mono text-[13px] text-[#101828]">
+                  {nominalDimension ? Number(nominalDimension).toFixed(8).replace('.', ',') : '—'}
+                </span>
+                <div className="flex gap-3">
+                  {(['Mm.', 'Mm2.', 'Mm3.'] as const).map(k => (
+                    <span
+                      key={k}
+                      className={cn(
+                        'text-[12px]',
+                        DIM_CROSS_MAP[weightMethod as DimMode] === k
+                          ? 'font-semibold text-[#1A1A1A]'
+                          : 'text-[#98A2B3]',
+                      )}
+                    >
+                      {k}
+                    </span>
                   ))}
                 </div>
               </div>
-
-              <FormField label="Valor fijo expresado en el sistema de unidades del método seleccionado" optional>
-                <input type="number" step="0.00000001" {...register('nominalDimension')}
-                  className={inputBase} placeholder="0,00000000" />
-              </FormField>
-
-              {['Mm.', 'Mm2.'].includes(weightMethod) && (
-                <SectionCalculator
-                  onCopy={v => setValue('nominalDimension', v.toFixed(6))}
-                />
-              )}
             </div>
           )}
         </div>
 
-        {/* Método 2 — Kg./Item */}
-        <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
-          <label className="flex cursor-pointer items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={weightMethod === 'Kg./Und'}
-              onChange={e => setValue('weightMethod', e.target.checked ? 'Kg./Und' : '')}
-              className="h-4 w-4 accent-[#2C3E50]"
-            />
-            <span className="text-[13px] font-semibold text-[#1A1A1A]">Método 2 [Kg./Item]:</span>
-            <span className="text-[12px] text-[#667085]">
-              Las piezas de este material tendrán peso unitario conocido
-            </span>
-          </label>
-        </div>
+        {weightConfigError && (
+          <p className="flex items-center gap-1.5 text-[13px] text-red-500">
+            <AlertCircle size={12} strokeWidth={2.5} />
+            {weightConfigError}
+          </p>
+        )}
 
-        {/* Método 3 — Items/Kg. */}
-        <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
-          <label className="flex cursor-pointer items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={weightMethod === 'Und/Kg.'}
-              onChange={e => setValue('weightMethod', e.target.checked ? 'Und/Kg.' : '')}
-              className="h-4 w-4 accent-[#2C3E50]"
-            />
-            <span className="text-[13px] font-semibold text-[#1A1A1A]">Método 3 [Items/Kg.]:</span>
-            <span className="text-[12px] text-[#667085]">
-              Las piezas de este material tendrán cantidad conocida por Kg.
-            </span>
-          </label>
-        </div>
+        {weightWizardOpen && (
+          <WeightWizardDialog
+            open={weightWizardOpen}
+            onClose={() => setWeightWizardOpen(false)}
+            weightMethod={weightMethod}
+            specificWeight={specificWeight}
+            nominalDimension={nominalDimension}
+            manualWeight={manualWeight}
+            onConfirmFormula={v => {
+              chooseWeightMethod(v.dimMode)
+              setValue('specificWeight', v.coefValue)
+              setValue('nominalDimension', v.constante)
+            }}
+            onConfirmManual={() => toggleManualWeight(true)}
+          />
+        )}
       </FormSection>
 
       <FormSection title="Materia prima por defecto">
@@ -1633,6 +1910,7 @@ export function CodificacionPage() {
       <FormDialog
         open={sheet === 'item-class'}
         title={editClass ? 'Modificar Clase' : 'Nueva Clase'}
+        width="w-[640px]"
         onClose={() => setSheet(null)}
       >
         {selFam && (

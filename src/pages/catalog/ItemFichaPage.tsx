@@ -663,6 +663,7 @@ function EditItemDialog({ open, item, onClose, onSaved }: {
       operationComplement: item.operationComplement ?? '',
       dim2:                item.dim2 != null ? String(item.dim2) : '',
       dim3:                item.dim3 != null ? String(item.dim3) : '',
+      weight:              item.weight != null ? String(item.weight) : '',
       stockMin:            item.stockMin != null ? String(item.stockMin) : '',
       stockMax:            item.stockMax != null ? String(item.stockMax) : '',
       warehouseZone:       item.warehouseZone ?? '',
@@ -687,6 +688,7 @@ function EditItemDialog({ open, item, onClose, onSaved }: {
         operationComplement: item.operationComplement ?? '',
         dim2:                item.dim2 != null ? String(item.dim2) : '',
         dim3:                item.dim3 != null ? String(item.dim3) : '',
+        weight:              item.weight != null ? String(item.weight) : '',
         stockMin:            item.stockMin != null ? String(item.stockMin) : '',
         stockMax:            item.stockMax != null ? String(item.stockMax) : '',
         warehouseZone:       item.warehouseZone ?? '',
@@ -718,7 +720,7 @@ function EditItemDialog({ open, item, onClose, onSaved }: {
 
   const onSubmit = (v: Record<string, string>) => {
     setApiErr(null)
-    m.mutate({
+    const payload: Record<string, unknown> = {
       typeId:              item.typeId,
       fullName:            v.fullName,
       abbreviation:        v.abbreviation || null,
@@ -737,7 +739,13 @@ function EditItemDialog({ open, item, onClose, onSaved }: {
       daysLeadTime:        v.daysLeadTime !== '' ? Number(v.daysLeadTime) : null,
       productionMemo:      v.productionMemo || null,
       observations:        v.observations || null,
-    })
+    }
+    // Weight is only editable for classes with manual weight entry — for calculated
+    // classes it's derived server-side and must not be overwritten from this dialog.
+    if (item.manualWeight) {
+      payload.weight = v.weight !== '' ? Number(v.weight) : null
+    }
+    m.mutate(payload)
   }
 
   return (
@@ -775,6 +783,11 @@ function EditItemDialog({ open, item, onClose, onSaved }: {
             <FormField label="Stock máximo" optional>
               <input type="number" step="0.001" {...register('stockMax')} className={inputBase} placeholder="0.000" />
             </FormField>
+            {item.manualWeight && (
+              <FormField label="Peso (kg)" optional helper="Esta clase carga el peso a mano">
+                <input type="number" step="0.000001" {...register('weight')} className={inputBase} placeholder="0.000000" />
+              </FormField>
+            )}
           </div>
         </FormSection>
 
@@ -1324,7 +1337,7 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
           {/* Technical + Pricing + Image */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <SectionCard title="Datos Técnicos">
-              <InfoRow label="Método de peso" value={item.weightMethod} />
+              <InfoRow label="Método de peso" value={item.manualWeight ? 'Manual (por ítem)' : item.weightMethod} />
               <InfoRow label="Dimensión 2" value={item.dim2 != null ? String(item.dim2) : null} />
               <InfoRow label="Dimensión 3" value={item.dim3 != null ? String(item.dim3) : null} />
               <InfoRow label="Peso (kg)" value={item.weight != null ? fmt(item.weight, 4) : null} />
