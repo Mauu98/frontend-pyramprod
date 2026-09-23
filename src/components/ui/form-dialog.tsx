@@ -15,7 +15,11 @@ export function FormDialog({ open, title, subtitle, onClose, children, width = '
   return (
     <Dialog.Root open={open} onOpenChange={v => !v && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" />
+        {/* Overlay and Content share z-50: with nested FormDialogs (e.g. the weight wizard opened
+            from inside "Nueva Clase"), Radix appends each dialog's Portal after the previous one's,
+            so equal z-index falls back to DOM order — the later (inner) dialog's overlay then
+            correctly paints above the earlier (outer) dialog's content instead of under it. */}
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" />
         <Dialog.Content
           className={`fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] ${width} -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-8px_rgba(0,0,0,0.2),0_0_0_1px_rgba(0,0,0,0.05)] focus:outline-none`}
         >
