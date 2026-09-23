@@ -1,7 +1,11 @@
 import axios from 'axios'
 
+// Calls below always use paths like '/auth/login', '/items' — never '/api/...' — so the
+// '/api' prefix has to live here. Locally VITE_API_URL is unset, giving '/api' (matches the
+// Vite dev proxy rule). On Vercel VITE_API_URL is the bare backend origin, so it becomes
+// '<origin>/api'.
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? '/api',
+  baseURL: `${import.meta.env.VITE_API_URL ?? ''}/api`,
 })
 
 apiClient.interceptors.request.use((config) => {
