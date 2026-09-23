@@ -1267,14 +1267,9 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             placeholder='Ej: PLA SAE1010 1"x1/8"'
           />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Abreviatura" optional>
-            <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
-          </FormField>
-          <FormField label="Operador / proceso" optional helper="Ej: galvanizado, pintado">
-            <input {...register('operatorName')} maxLength={45} className={inputBase} placeholder="Ej: galvanizado" />
-          </FormField>
-        </div>
+        <FormField label="Abreviatura" optional>
+          <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
+        </FormField>
         <FormField label="Descripción" optional>
           <textarea {...register('description')} rows={2} className={textareaBase} />
         </FormField>
