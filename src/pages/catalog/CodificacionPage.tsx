@@ -16,7 +16,7 @@ import { MaterialReferenceGallery } from '@/components/catalog/MaterialReference
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
   AlertTriangle, AlertCircle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
-  FileSpreadsheet, ArrowDownUp,
+  FileSpreadsheet, ArrowDownUp, HelpCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -30,7 +30,7 @@ import imgPerfilI from '@/assets/materials/perfil_i.png'
 import imgPerfilT from '@/assets/materials/perfil_t.png'
 import imgKgxm from '@/assets/materials/kgxm.png'
 
-type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | 'family-batch' | 'class-batch' | 'copy-to-family' | null
+type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'rename' | 'class-rename' | 'family-batch' | 'class-batch' | 'copy-to-family' | null
 interface ColRow { id: number; code: string; name: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -308,13 +308,13 @@ const SINGULAR: Record<string, string> = {
 
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
-  onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, sortable, width = 'w-[272px]',
+  onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, onRename, sortable, width = 'w-[272px]',
 }: {
   title: string; icon: LucideIcon; rows: ColRow[]; selected: ColRow | null
   isLoading?: boolean; enabled: boolean; placeholderText: string
   onSelect: (r: ColRow) => void; onNew: () => void
   onEdit: (r: ColRow) => void; onDelete: (r: ColRow) => void
-  onBatch?: () => void; onCopy?: () => void; onExport?: () => void
+  onBatch?: () => void; onCopy?: () => void; onExport?: () => void; onRename?: () => void
   sortable?: boolean; width?: string
 }) {
   const [q, setQ] = useState('')
@@ -377,6 +377,15 @@ function CatalogColumn({
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
               >
                 <ListPlus size={13} />
+              </button>
+            )}
+            {onRename && (
+              <button
+                onClick={onRename}
+                title={`Renombrar ${singular}s en lote`}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+              >
+                <Replace size={13} />
               </button>
             )}
             <button
@@ -493,20 +502,20 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <button
-            onClick={onRename}
-            disabled={!enabled}
-            title="Renombrar en lote"
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
-          >
-            <Replace size={13} />
-          </button>
-          <button
             onClick={onBatch}
             disabled={!enabled}
             title="Importar ítems desde texto"
             className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
           >
             <ListPlus size={13} />
+          </button>
+          <button
+            onClick={onRename}
+            disabled={!enabled}
+            title="Renombrar en lote"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+          >
+            <Replace size={13} />
           </button>
           <button
             onClick={onNew}
@@ -660,6 +669,8 @@ function BatchImportForm({ typeId, typeLabel, onSave, onClose }: {
 function RenameForm({ typeId, typeLabel, onSave, onClose }: {
   typeId: number; typeLabel: string; onSave: () => void; onClose: () => void
 }) {
+  const [mode, setMode] = useState<'simple' | 'batch'>('simple')
+
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: { search: '', replacement: '' },
   })
@@ -668,26 +679,191 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
       apiClient.patch(`/item-classes/${typeId}/items/rename`, d),
     onSuccess: onSave,
   })
+
+  const {
+    register: registerBatch, handleSubmit: handleSubmitBatch, formState: { errors: batchErrors },
+  } = useForm({
+    defaultValues: { text: '', applyToNames: true, applyToAbbreviations: true },
+  })
+  const mBatch = useMutation({
+    mutationFn: (d: { text: string; applyToNames: boolean; applyToAbbreviations: boolean }) =>
+      apiClient.patch(`/item-classes/${typeId}/items/batch-rename`, d),
+    onSuccess: onSave,
+  })
+
   return (
-    <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
+    <div className="flex flex-col gap-6">
       <ParentBadge label="Clase" value={typeLabel} />
-      <FormField label="Buscar" required error={!!errors.search && 'Campo requerido'}>
-        <input
-          {...register('search', { required: true })}
-          className={cn(inputBase, errors.search && inputError)}
-          placeholder="Texto a buscar en los nombres..."
-        />
-      </FormField>
-      <FormField label="Reemplazar por" optional>
-        <input
-          {...register('replacement')}
-          className={inputBase}
-          placeholder="Nuevo texto (vacío para eliminar)"
-        />
-      </FormField>
-      {m.isError && <ErrorBanner message="No se pudo ejecutar el reemplazo. Verificá los datos." />}
-      <FormActions pending={m.isPending} isEdit={false} label="Ejecutar reemplazo" onClose={onClose} />
-    </form>
+
+      <div className="flex gap-2">
+        {([
+          ['simple', 'Reemplazo simple'],
+          ['batch', 'Reemplazo masivo'],
+        ] as const).map(([val, label]) => (
+          <button
+            key={val} type="button" onClick={() => setMode(val)}
+            className={cn(
+              'h-8 rounded-md px-3 text-[12.5px] font-medium transition',
+              mode === val ? 'bg-[#2C6B2F] text-white' : 'bg-[#F2F4F7] text-[#475467] hover:bg-[#E4E7EC]',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'simple' && (
+        <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
+          <FormField label="Buscar" required error={!!errors.search && 'Campo requerido'}>
+            <input
+              {...register('search', { required: true })}
+              className={cn(inputBase, errors.search && inputError)}
+              placeholder="Texto a buscar en los nombres..."
+            />
+          </FormField>
+          <FormField label="Reemplazar por" optional>
+            <input
+              {...register('replacement')}
+              className={inputBase}
+              placeholder="Nuevo texto (vacío para eliminar)"
+            />
+          </FormField>
+          {m.isError && <ErrorBanner message="No se pudo ejecutar el reemplazo. Verificá los datos." />}
+          <FormActions pending={m.isPending} isEdit={false} label="Ejecutar reemplazo" onClose={onClose} />
+        </form>
+      )}
+
+      {mode === 'batch' && (
+        <form onSubmit={handleSubmitBatch(d => mBatch.mutate(d))} className="flex flex-col gap-7">
+          <FormField
+            label="Pares a reemplazar" required error={!!batchErrors.text && 'Campo requerido'}
+            helper='Una sustitución por línea, separada por ";". Ej: "PLA;#" reemplaza PLA por #, "PLA;" elimina PLA.'
+          >
+            <textarea
+              {...registerBatch('text', { required: true })}
+              rows={6}
+              className={cn(textareaBase, 'font-mono', batchErrors.text && inputError)}
+              placeholder={'PLA;#\nSAE;Sae'}
+            />
+          </FormField>
+          <div className="flex flex-col gap-2.5">
+            <label className="flex items-center gap-2 text-[13.5px] text-[#344054]">
+              <input type="checkbox" {...registerBatch('applyToNames')} className="h-4 w-4 accent-[#2C6B2F]" />
+              Reemplazar en nombres
+            </label>
+            <label className="flex items-center gap-2 text-[13.5px] text-[#344054]">
+              <input type="checkbox" {...registerBatch('applyToAbbreviations')} className="h-4 w-4 accent-[#2C6B2F]" />
+              Reemplazar en abreviaturas
+            </label>
+          </div>
+          {mBatch.isError && <ErrorBanner message={getSaveErrMsg(mBatch.error)} />}
+          <FormActions pending={mBatch.isPending} isEdit={false} label="Ejecutar reemplazo masivo" onClose={onClose} />
+        </form>
+      )}
+    </div>
+  )
+}
+
+// ─── Rename classes in bulk (within a family) ────────────────────────────────
+function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
+  familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
+}) {
+  const [mode, setMode] = useState<'simple' | 'batch'>('simple')
+
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    defaultValues: { search: '', replacement: '' },
+  })
+  const m = useMutation({
+    mutationFn: (d: { search: string; replacement: string }) =>
+      apiClient.patch(`/item-classes/families/${familyId}/batch-rename`, {
+        text: `${d.search};${d.replacement}`,
+        applyToNames: true,
+        applyToAbbreviations: true,
+      }),
+    onSuccess: onSave,
+  })
+
+  const {
+    register: registerBatch, handleSubmit: handleSubmitBatch, formState: { errors: batchErrors },
+  } = useForm({
+    defaultValues: { text: '', applyToNames: true, applyToAbbreviations: true },
+  })
+  const mBatch = useMutation({
+    mutationFn: (d: { text: string; applyToNames: boolean; applyToAbbreviations: boolean }) =>
+      apiClient.patch(`/item-classes/families/${familyId}/batch-rename`, d),
+    onSuccess: onSave,
+  })
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ParentBadge label="Familia" value={familyLabel} />
+
+      <div className="flex gap-2">
+        {([
+          ['simple', 'Reemplazo simple'],
+          ['batch', 'Reemplazo masivo'],
+        ] as const).map(([val, label]) => (
+          <button
+            key={val} type="button" onClick={() => setMode(val)}
+            className={cn(
+              'h-8 rounded-md px-3 text-[12.5px] font-medium transition',
+              mode === val ? 'bg-[#2C6B2F] text-white' : 'bg-[#F2F4F7] text-[#475467] hover:bg-[#E4E7EC]',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'simple' && (
+        <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
+          <FormField label="Buscar" required error={!!errors.search && 'Campo requerido'}>
+            <input
+              {...register('search', { required: true })}
+              className={cn(inputBase, errors.search && inputError)}
+              placeholder="Texto a buscar en nombres y abreviaturas..."
+            />
+          </FormField>
+          <FormField label="Reemplazar por" optional>
+            <input
+              {...register('replacement')}
+              className={inputBase}
+              placeholder="Nuevo texto (vacío para eliminar)"
+            />
+          </FormField>
+          {m.isError && <ErrorBanner message="No se pudo ejecutar el reemplazo. Verificá los datos." />}
+          <FormActions pending={m.isPending} isEdit={false} label="Ejecutar reemplazo" onClose={onClose} />
+        </form>
+      )}
+
+      {mode === 'batch' && (
+        <form onSubmit={handleSubmitBatch(d => mBatch.mutate(d))} className="flex flex-col gap-7">
+          <FormField
+            label="Pares a reemplazar" required error={!!batchErrors.text && 'Campo requerido'}
+            helper='Una sustitución por línea, separada por ";". Ej: "PLA;#" reemplaza PLA por #, "PLA;" elimina PLA.'
+          >
+            <textarea
+              {...registerBatch('text', { required: true })}
+              rows={6}
+              className={cn(textareaBase, 'font-mono', batchErrors.text && inputError)}
+              placeholder={'PLA;#\nSAE;Sae'}
+            />
+          </FormField>
+          <div className="flex flex-col gap-2.5">
+            <label className="flex items-center gap-2 text-[13.5px] text-[#344054]">
+              <input type="checkbox" {...registerBatch('applyToNames')} className="h-4 w-4 accent-[#2C6B2F]" />
+              Reemplazar en nombres
+            </label>
+            <label className="flex items-center gap-2 text-[13.5px] text-[#344054]">
+              <input type="checkbox" {...registerBatch('applyToAbbreviations')} className="h-4 w-4 accent-[#2C6B2F]" />
+              Reemplazar en abreviaturas
+            </label>
+          </div>
+          {mBatch.isError && <ErrorBanner message={getSaveErrMsg(mBatch.error)} />}
+          <FormActions pending={mBatch.isPending} isEdit={false} label="Ejecutar reemplazo masivo" onClose={onClose} />
+        </form>
+      )}
+    </div>
   )
 }
 
@@ -974,6 +1150,7 @@ const WIZARD_STEPS: WizardStep[] = ['gate', 'coef-value', 'dimension', 'constant
 
 function WeightWizardDialog({
   open, onClose, weightMethod, specificWeight, nominalDimension, manualWeight,
+  familyLabel, itemClassName,
   onConfirmFormula, onConfirmManual,
 }: {
   open:             boolean
@@ -982,6 +1159,8 @@ function WeightWizardDialog({
   specificWeight:   string
   nominalDimension: string
   manualWeight:     boolean
+  familyLabel:      string
+  itemClassName:    string
   onConfirmFormula: (v: { dimMode: DimMode; coefValue: string; constante: string }) => void
   onConfirmManual:  () => void
 }) {
@@ -1020,6 +1199,9 @@ function WeightWizardDialog({
     : step === 'dimension'  ? `Paso ${stepIndex} de ${totalSteps} — Modalidad de Consumo`
     :                          `Paso ${stepIndex} de ${totalSteps} — Factor Dimensional Constante`
 
+  // Contexto de familia + clase en trámite, visible en todos los pasos del wizard.
+  const subtitle = itemClassName.trim() ? `${familyLabel} · ${itemClassName.trim()}` : familyLabel
+
   const handleGateNext = () => {
     if (mode === 'manual') { onConfirmManual(); onClose(); return }
     setStep('coef-value')
@@ -1051,7 +1233,7 @@ function WeightWizardDialog({
   )
 
   return (
-    <FormDialog open={open} title={title} onClose={onClose} width="w-[620px]">
+    <FormDialog open={open} title={title} subtitle={subtitle} onClose={onClose} width="w-[620px]">
       {step !== 'gate' && (
         <div className="mb-5 flex gap-1.5">
           {WIZARD_STEPS.slice(1).map((s, i) => (
@@ -1165,9 +1347,45 @@ function WeightWizardDialog({
   )
 }
 
+// ─── Inline help tip (small "?" button + floating text panel) ────────────────
+function HelpTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative ml-1.5 inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="flex h-4 w-4 items-center justify-center rounded-full text-[#98A2B3] transition hover:text-[#2C6B2F]"
+      >
+        <HelpCircle size={14} strokeWidth={2} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-6 z-10 w-72 rounded-lg border border-[#E4E7EC] bg-white p-3 text-[12px] font-normal leading-relaxed text-[#475467] shadow-lg">
+          {text}
+        </div>
+      )}
+    </span>
+  )
+}
+
+const NAME_HELP_BASE = 'Definí un nombre de material que incluya sus medidas por defecto, independientemente de cómo sea la presentación final de los artículos que deriven de esta clase.'
+const NAME_HELP_BY_MODE: Record<DimMode, string> = {
+  'Mm.':  'Esta clase consume por largo de corte (modalidad 1): el nombre debe hacer referencia a los datos dimensionales de la sección del material.',
+  'Mm2.': 'Esta clase consume por región de corte (modalidad 2): el nombre debe hacer referencia al espesor (u otro dato con sentido comercial) que identifique al material.',
+  'Mm3.': 'Esta clase es de tratamiento por volumen (modalidad 3): acá no hace falta especificar dimensiones, esas se estipulan en el último paso de la codificación.',
+}
+const ABBR_HELP = 'Abreviatura corta que identifica esta clase dentro de los códigos de sus ítems. Validá que no se repita con otra clase de la misma familia.'
+
 // ─── Item class form ──────────────────────────────────────────────────────────
-function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
-  item: ItemClass | null; familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
+function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClasses, onSave, onClose }: {
+  item: ItemClass | null
+  familyId: number
+  familyLabel: string
+  segmentCode: string
+  existingClasses: ItemClass[]
+  onSave: () => void
+  onClose: () => void
 }) {
   const qc = useQueryClient()
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
@@ -1190,9 +1408,39 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
   const manualWeight = watch('manualWeight')
   const specificWeight = watch('specificWeight')
   const nominalDimension = watch('nominalDimension')
+  const name = watch('name')
+  const abbreviation = watch('abbreviation')
 
   const [weightConfigError, setWeightConfigError] = useState<string | null>(null)
   const [weightWizardOpen, setWeightWizardOpen] = useState(false)
+
+  // Gate "Métodos Peso Calculado" behind an explicit "Validar" step, only for classes being
+  // created — editing an already-saved class doesn't need to re-validate its name/abbreviation.
+  const [validated, setValidated] = useState(!!item)
+  const [validateMsg, setValidateMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  useEffect(() => {
+    if (!item) setValidated(false)
+  }, [name, abbreviation, item])
+
+  const handleValidate = () => {
+    const trimmedName = name.trim()
+    const trimmedAbbr = abbreviation.trim()
+    if (!trimmedName) {
+      setValidateMsg({ ok: false, text: 'Ingresá un nombre antes de validar.' })
+      return
+    }
+    const siblings = existingClasses.filter(c => c.id !== item?.id)
+    const dupName = siblings.some(c => c.name.trim().toLowerCase() === trimmedName.toLowerCase())
+    const dupAbbr = trimmedAbbr && siblings.some(c => (c.abbreviation ?? '').trim().toLowerCase() === trimmedAbbr.toLowerCase())
+    if (dupName) { setValidateMsg({ ok: false, text: 'Ya existe una clase con ese nombre en esta familia.' }); return }
+    if (dupAbbr) { setValidateMsg({ ok: false, text: 'Ya existe una clase con esa abreviatura en esta familia.' }); return }
+    setValidated(true)
+    setValidateMsg({ ok: true, text: 'Nombre y abreviatura disponibles.' })
+  }
+
+  const nameHelpText = weightMethod && weightMethod in NAME_HELP_BY_MODE
+    ? `${NAME_HELP_BASE} ${NAME_HELP_BY_MODE[weightMethod as DimMode]}`
+    : NAME_HELP_BASE
 
   // Mutual exclusion between the 3 weightMethod cards/gallery and the manual-weight card.
   const chooseWeightMethod = (val: string) => {
@@ -1248,8 +1496,10 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
       manualWeight:     isManualWeight,
       specificWeight:   isManualWeight ? null : (v.specificWeight !== '' ? Number(v.specificWeight) : null),
       nominalDimension: isManualWeight ? null : (v.nominalDimension !== '' ? Number(v.nominalDimension) : null),
-      material:         v.material || null,
-      materialName:     v.materialName || null,
+      // Materia prima por defecto sólo aplica al Segmento 4 (Piezas) — cualquier valor cargado
+      // antes de cambiar de familia/segmento no debe persistirse para el resto de los segmentos.
+      material:         segmentCode === '4' ? (v.material || null) : null,
+      materialName:     segmentCode === '4' ? (v.materialName || null) : null,
       operatorName:     v.operatorName || null,
     })
   }
@@ -1260,19 +1510,36 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
 
       <FormSection title="Identificación" first>
         <FormField label="Nombre / Especificación" required error={!!errors.name && 'Campo requerido'}
-          helper='Ej: PLA SAE1010 1"x1/8"'>
+          helper='Ej: PLA SAE1010 1"x1/8"' labelExtra={<HelpTip text={nameHelpText} />}>
           <input
             {...register('name', { required: true })}
             className={cn(inputBase, errors.name && inputError)}
             placeholder='Ej: PLA SAE1010 1"x1/8"'
           />
         </FormField>
-        <FormField label="Abreviatura" optional>
+        <FormField label="Abreviatura" optional labelExtra={<HelpTip text={ABBR_HELP} />}>
           <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
         </FormField>
         <FormField label="Descripción" optional>
           <textarea {...register('description')} rows={2} className={textareaBase} />
         </FormField>
+
+        {!item && (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleValidate}
+              className="h-8 shrink-0 rounded-md border border-[#D0D5DD] px-3 text-[12.5px] font-medium text-[#344054] transition hover:border-[#2C6B2F] hover:text-[#2C6B2F]"
+            >
+              Validar
+            </button>
+            {validateMsg && (
+              <span className={cn('text-[12.5px]', validateMsg.ok ? 'text-[#2C6B2F]' : 'text-red-500')}>
+                {validateMsg.text}
+              </span>
+            )}
+          </div>
+        )}
       </FormSection>
 
       <FormSection title="Datos para pesos calculados">
@@ -1280,8 +1547,13 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
           <div className="flex items-center gap-4">
             <button
               type="button"
+              disabled={!validated}
               onClick={() => setWeightWizardOpen(true)}
-              className="h-10 shrink-0 rounded-lg bg-[#2C6B2F] px-4 text-[13px] font-semibold text-white transition hover:bg-[#245A27] active:bg-[#1E4B21]"
+              title={!validated ? 'Validá el nombre y la abreviatura primero' : undefined}
+              className={cn(
+                'h-10 shrink-0 rounded-lg bg-[#2C6B2F] px-4 text-[13px] font-semibold text-white transition hover:bg-[#245A27] active:bg-[#1E4B21]',
+                !validated && 'cursor-not-allowed opacity-40 hover:bg-[#2C6B2F] active:bg-[#2C6B2F]',
+              )}
             >
               Métodos Peso Calculado
             </button>
@@ -1345,6 +1617,8 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
             specificWeight={specificWeight}
             nominalDimension={nominalDimension}
             manualWeight={manualWeight}
+            familyLabel={familyLabel}
+            itemClassName={name}
             onConfirmFormula={v => {
               chooseWeightMethod(v.dimMode)
               setValue('specificWeight', v.coefValue)
@@ -1355,38 +1629,40 @@ function ItemClassForm({ item, familyId, familyLabel, onSave, onClose }: {
         )}
       </FormSection>
 
-      <FormSection title="Materia prima por defecto">
-        <FormField label="Material" optional helper="Se pre-carga al crear ítems de esta clase">
-          <div className="relative">
-            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
-            <input
-              value={matSearch}
-              onChange={e => handleMatSearch(e.target.value)}
-              onFocus={() => { if (matResults.length) setShowMatDrop(true) }}
-              className={cn(inputBase, 'pl-9')}
-              placeholder="Buscar materia prima..."
-            />
-            {showMatDrop && matResults.length > 0 && (
-              <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
-                {matResults.slice(0, 8).map(r => (
-                  <button key={r.fullCode} type="button"
-                    onClick={() => {
-                      setValue('material', r.fullCode)
-                      setValue('materialName', r.fullName)
-                      setMatSearch(`${r.fullCode} — ${r.fullName}`)
-                      setShowMatDrop(false)
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
-                  >
-                    <span className="shrink-0 font-mono text-[12px] text-[#667085]">{r.fullCode}</span>
-                    <span className="text-[14px] text-[#101828]">{r.fullName}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </FormField>
-      </FormSection>
+      {segmentCode === '4' && (
+        <FormSection title="Materia prima por defecto">
+          <FormField label="Material" optional helper="Se pre-carga al crear ítems de esta clase">
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
+              <input
+                value={matSearch}
+                onChange={e => handleMatSearch(e.target.value)}
+                onFocus={() => { if (matResults.length) setShowMatDrop(true) }}
+                className={cn(inputBase, 'pl-9')}
+                placeholder="Buscar materia prima..."
+              />
+              {showMatDrop && matResults.length > 0 && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-[#E4E7EC] bg-white shadow-xl">
+                  {matResults.slice(0, 8).map(r => (
+                    <button key={r.fullCode} type="button"
+                      onClick={() => {
+                        setValue('material', r.fullCode)
+                        setValue('materialName', r.fullName)
+                        setMatSearch(`${r.fullCode} — ${r.fullName}`)
+                        setShowMatDrop(false)
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB]"
+                    >
+                      <span className="shrink-0 font-mono text-[12px] text-[#667085]">{r.fullCode}</span>
+                      <span className="text-[14px] text-[#101828]">{r.fullName}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </FormField>
+        </FormSection>
+      )}
 
       {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
       <FormActions pending={m.isPending} isEdit={!!item} label="Crear clase" onClose={onClose} />
@@ -1867,6 +2143,7 @@ export function CodificacionPage() {
             onDelete={row => { setDelTarget({ kind: 'item-class', row }); setDelApiErr(null) }}
             onBatch={() => setSheet('class-batch')}
             onCopy={() => setSheet('copy-to-family')}
+            onRename={() => setSheet('class-rename')}
           />
 
           <ItemsColumn
@@ -1910,13 +2187,16 @@ export function CodificacionPage() {
       <FormDialog
         open={sheet === 'item-class'}
         title={editClass ? 'Modificar Clase' : 'Nueva Clase'}
+        subtitle={selSeg ? `Segmento ${selSeg.code} — ${selSeg.name}` : undefined}
         width="w-[640px]"
         onClose={() => setSheet(null)}
       >
-        {selFam && (
+        {selFam && selSeg && (
           <ItemClassForm
             item={editClass} familyId={selFam.id}
             familyLabel={`${selFam.code} — ${selFam.name}`}
+            segmentCode={selSeg.code}
+            existingClasses={itemClasses}
             onSave={() => setSheet(null)} onClose={() => setSheet(null)}
           />
         )}
@@ -1959,6 +2239,24 @@ export function CodificacionPage() {
             typeLabel={`${selClass.code} — ${selClass.name}`}
             onSave={() => {
               qc.invalidateQueries({ queryKey: ['items', selClass.id] })
+              setSheet(null)
+            }}
+            onClose={() => setSheet(null)}
+          />
+        )}
+      </FormDialog>
+
+      <FormDialog
+        open={sheet === 'class-rename'}
+        title="Renombrar clases en lote"
+        onClose={() => setSheet(null)}
+      >
+        {selFam && (
+          <RenameClassesForm
+            familyId={selFam.id}
+            familyLabel={`${selFam.code} — ${selFam.name}`}
+            onSave={() => {
+              qc.invalidateQueries({ queryKey: ['item-classes', selFam.id] })
               setSheet(null)
             }}
             onClose={() => setSheet(null)}

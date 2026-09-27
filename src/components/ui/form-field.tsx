@@ -12,6 +12,7 @@ export function FormField({
   helper,
   error,
   className,
+  labelExtra,
   children,
 }: {
   label:      string
@@ -20,16 +21,18 @@ export function FormField({
   helper?:    string
   error?:     string | boolean
   className?: string
+  labelExtra?: ReactNode
   children:   ReactNode
 }) {
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <label className="text-[14px] font-medium text-[#344054]">
+      <label className="flex items-center text-[14px] font-medium text-[#344054]">
         {label}
         {required && <span className="ml-1 text-red-500">*</span>}
         {optional && (
           <span className="ml-2 text-[13px] font-normal text-[#98A2B3]">opcional</span>
         )}
+        {labelExtra}
       </label>
 
       {children}

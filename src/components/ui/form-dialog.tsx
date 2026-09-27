@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 interface FormDialogProps {
   open:      boolean
@@ -12,6 +12,23 @@ interface FormDialogProps {
 }
 
 export function FormDialog({ open, title, subtitle, onClose, children, width = 'w-[560px]' }: FormDialogProps) {
+  // Long forms (e.g. "Nueva Clase") can scroll past the fold with no visual cue that there's more
+  // below — surfaced as "the button stays half hidden". A bottom fade while scrollable content
+  // remains makes the cutoff read as "scroll for more", not "the button is missing".
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [hasMoreBelow, setHasMoreBelow] = useState(false)
+
+  useEffect(() => {
+    const el = bodyRef.current
+    if (!open || !el) { setHasMoreBelow(false); return }
+    const check = () => setHasMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 4)
+    check()
+    el.addEventListener('scroll', check)
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', check); ro.disconnect() }
+  }, [open, children])
+
   return (
     <Dialog.Root open={open} onOpenChange={v => !v && onClose()}>
       <Dialog.Portal>
@@ -48,8 +65,13 @@ export function FormDialog({ open, title, subtitle, onClose, children, width = '
           <div className="mx-10 border-t border-[#F2F4F7]" />
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto px-10 py-8 [scrollbar-gutter:stable]">
-            {children}
+          <div className="relative min-h-0 flex-1">
+            <div ref={bodyRef} className="h-full overflow-y-auto px-10 py-8 [scrollbar-gutter:stable]">
+              {children}
+            </div>
+            {hasMoreBelow && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white to-transparent" />
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
