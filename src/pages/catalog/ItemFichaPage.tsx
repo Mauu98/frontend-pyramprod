@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { useForm } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
@@ -11,8 +10,8 @@ import { apiClient } from '@/lib/api-client'
 import type { ItemDetail } from '@/types/api.types'
 import { cn } from '@/lib/utils'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { FormActions, ErrorBanner, FormField, FormSection } from '@/components/ui/form-field'
-import { inputBase, textareaBase } from '@/components/ui/form-tokens'
+import { FormActions, ErrorBanner, FormField } from '@/components/ui/form-field'
+import { inputBase } from '@/components/ui/form-tokens'
 import { EditItemDialog } from '@/components/catalog/EditItemDialog'
 
 // ─── Local types ──────────────────────────────────────────────────────────────
