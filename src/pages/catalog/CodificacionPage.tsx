@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/form-field'
 import type { Segment, Family, ItemClass, ItemSummary, ItemDetail } from '@/types/api.types'
 import { NewItemForm } from '@/components/catalog/NewItemForm'
+import { EditItemDialog } from '@/components/catalog/EditItemDialog'
 import { MaterialReferenceGallery } from '@/components/catalog/MaterialReferenceGallery'
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
@@ -460,14 +461,14 @@ function CatalogColumn({
                   onClick={e => { e.stopPropagation(); onEdit(row) }}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]"
                 >
-                  <Pencil size={12} />
+                  <Pencil size={13} />
                 </button>
                 <button
                   title={`Eliminar ${singular}`}
                   onClick={e => { e.stopPropagation(); onDelete(row) }}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
                 >
-                  <Trash2 size={12} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>
@@ -479,9 +480,10 @@ function CatalogColumn({
 }
 
 // ─── Items column ─────────────────────────────────────────────────────────────
-function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate, onNew, onBatch, onRename }: {
+function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate, onEdit, editingId, onNew, onBatch, onRename }: {
   rows: ItemSummary[]; selected: ItemSummary | null; isLoading?: boolean; enabled: boolean
-  onSelect: (r: ItemSummary) => void; onNavigate: (r: ItemSummary) => void
+  onSelect: (r: ItemSummary) => void; onNavigate: (r: ItemSummary) => void; onEdit: (r: ItemSummary) => void
+  editingId?: number | null
   onNew: () => void; onBatch: () => void; onRename: () => void
 }) {
   const [q, setQ] = useState('')
@@ -586,6 +588,16 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
                 <span className="font-mono text-[12px] font-semibold text-slate-500">{(row.stockAvailable ?? 0).toFixed(2)}</span>
                 {row.unitOfMeasure && <span className="text-[11px] text-slate-400">{row.unitOfMeasure}</span>}
               </div>
+              <button
+                title="Editar ítem"
+                disabled={editingId === row.id}
+                onClick={e => { e.stopPropagation(); onEdit(row) }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F] disabled:opacity-100"
+              >
+                {editingId === row.id
+                  ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
+                  : <Pencil size={13} />}
+              </button>
               <button
                 title="Ver ficha del ítem"
                 onClick={e => { e.stopPropagation(); onNavigate(row) }}
@@ -1977,6 +1989,7 @@ export function CodificacionPage() {
   const [editSeg,   setEditSeg]   = useState<Segment | null>(null)
   const [editFam,   setEditFam]   = useState<Family | null>(null)
   const [editClass, setEditClass] = useState<ItemClass | null>(null)
+  const [editItemId, setEditItemId] = useState<number | null>(null)
 
   const [delTarget, setDelTarget] = useState<{ kind: 'segment' | 'family' | 'item-class'; row: ColRow } | null>(null)
   const [delApiErr, setDelApiErr] = useState<string | null>(null)
@@ -1999,6 +2012,13 @@ export function CodificacionPage() {
     queryKey: ['items', selClass?.id],
     queryFn:  () => apiClient.get<ItemSummary[]>(`/item-classes/${selClass!.id}/items`).then(r => r.data),
     enabled:  !!selClass,
+  })
+  // Items list only carries ItemSummary — EditItemDialog needs the full ItemDetail,
+  // so it's fetched on demand the moment the user clicks "Editar" on a row.
+  const { data: editItemDetail, isFetching: loadingEditItem } = useQuery({
+    queryKey: ['item-detail', editItemId],
+    queryFn:  () => apiClient.get<ItemDetail>(`/items/${editItemId}`).then(r => r.data),
+    enabled:  !!editItemId,
   })
 
   const deleteSegMut = useMutation({
@@ -2129,11 +2149,13 @@ export function CodificacionPage() {
             onBatch={() => setSheet('family-batch')}
             onExport={() => generateFamiliasXLSX(families, selSeg ? `${selSeg.code}` : 'todas')}
             sortable
+            width="w-[300px]"
           />
 
           <CatalogColumn
             title="Clases" icon={Package} rows={itemClasses} selected={selClass}
             isLoading={loadClasses} enabled={!!selFam} placeholderText="Seleccioná una familia"
+            width="w-[330px]"
             onSelect={row => {
               const cls = itemClasses.find(t => t.id === row.id)!
               setSelClass(cls); setSelItem(null)
@@ -2144,12 +2166,15 @@ export function CodificacionPage() {
             onBatch={() => setSheet('class-batch')}
             onCopy={() => setSheet('copy-to-family')}
             onRename={() => setSheet('class-rename')}
+            sortable
           />
 
           <ItemsColumn
             rows={items} selected={selItem} isLoading={loadItems} enabled={!!selClass}
             onSelect={setSelItem}
             onNavigate={row => navigate({ to: `/app/catalog/items/${row.id}` })}
+            onEdit={row => setEditItemId(row.id)}
+            editingId={loadingEditItem ? editItemId : null}
             onNew={() => setSheet('item')}
             onBatch={() => setSheet('batch')}
             onRename={() => setSheet('rename')}
@@ -2208,6 +2233,15 @@ export function CodificacionPage() {
           itemType={selClass}
           onSave={(_item: ItemDetail) => setSheet(null)}
           onClose={() => setSheet(null)}
+        />
+      )}
+
+      {editItemDetail && (
+        <EditItemDialog
+          open={!!editItemId}
+          item={editItemDetail}
+          onClose={() => setEditItemId(null)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['items', selClass?.id] })}
         />
       )}
 
