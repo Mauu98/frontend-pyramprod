@@ -108,7 +108,7 @@ function ContextPanel({
                 <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#2C6B2F]">
                   {selItem.fullCode}
                 </p>
-                <p className="truncate text-[16px] font-bold text-[#111827]">{selItem.fullName}</p>
+                <p className="line-clamp-2 text-[16px] font-bold leading-snug text-[#111827]">{selItem.fullName}</p>
               </div>
             </div>
           </div>
@@ -143,7 +143,7 @@ function ContextPanel({
                 <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   {selClass.code}
                 </p>
-                <p className="truncate text-[16px] font-bold text-[#111827]">{selClass.name}</p>
+                <p className="line-clamp-2 text-[16px] font-bold leading-snug text-[#111827]">{selClass.name}</p>
               </div>
             </div>
           </div>
@@ -184,7 +184,7 @@ function ContextPanel({
                 <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   {selFam.code}
                 </p>
-                <p className="truncate text-[16px] font-bold text-[#111827]">{selFam.name}</p>
+                <p className="line-clamp-2 text-[16px] font-bold leading-snug text-[#111827]">{selFam.name}</p>
               </div>
             </div>
           </div>
@@ -214,7 +214,7 @@ function ContextPanel({
               <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 {selSeg.code}
               </p>
-              <p className="truncate text-[16px] font-bold text-[#111827]">{selSeg.name}</p>
+              <p className="line-clamp-2 text-[16px] font-bold leading-snug text-[#111827]">{selSeg.name}</p>
             </div>
           </div>
         </div>
@@ -567,49 +567,55 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
               onDoubleClick={() => onNavigate(row)}
               title="Doble click para ver ficha"
               className={cn(
-                'group relative flex cursor-pointer items-center gap-3 border-b border-gray-50 px-5 py-3.5 transition-colors duration-100',
+                'group relative flex cursor-pointer flex-col gap-1.5 border-b border-gray-50 px-5 py-3 transition-colors duration-100',
                 isSel ? 'bg-[#2C6B2F]/8' : 'hover:bg-[#fafafa]',
               )}
             >
               {isSel && <span className="absolute inset-y-0 left-0 w-0.5 rounded-r bg-[#2C6B2F]" />}
-              <span className={cn(
-                'shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-bold',
-                isSel ? 'bg-[#2C6B2F]/12 text-[#2C6B2F]' : 'bg-slate-100 text-slate-500',
-              )}>
-                {row.fullCode}
-              </span>
-              <span className={cn(
-                'min-w-0 flex-1 truncate text-[14px]',
-                isSel ? 'font-semibold text-[#1a3d1c]' : 'font-medium text-[#374151]',
-              )}>
-                {row.fullName}
-              </span>
-              <div className="flex shrink-0 flex-col items-end gap-0.5">
-                <span className="font-mono text-[12px] font-semibold text-slate-500">{(row.stockAvailable ?? 0).toFixed(2)}</span>
-                {row.unitOfMeasure && <span className="text-[11px] text-slate-400">{row.unitOfMeasure}</span>}
+              <div className="flex items-start gap-2">
+                <span className={cn(
+                  'mt-0.5 shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-bold',
+                  isSel ? 'bg-[#2C6B2F]/12 text-[#2C6B2F]' : 'bg-slate-100 text-slate-500',
+                )}>
+                  {row.fullCode}
+                </span>
+                <span className={cn(
+                  'min-w-0 flex-1 line-clamp-2 text-[14px] leading-snug',
+                  isSel ? 'font-semibold text-[#1a3d1c]' : 'font-medium text-[#374151]',
+                )}>
+                  {row.fullName}
+                </span>
               </div>
-              <button
-                title="Editar ítem"
-                disabled={editingId === row.id}
-                onClick={e => { e.stopPropagation(); onEdit(row) }}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F] disabled:opacity-100"
-              >
-                {editingId === row.id
-                  ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
-                  : <Pencil size={13} />}
-              </button>
-              <button
-                title="Ver ficha del ítem"
-                onClick={e => { e.stopPropagation(); onNavigate(row) }}
-                className={cn(
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition',
-                  isSel
-                    ? 'border-[#2C6B2F]/20 bg-[#2C6B2F]/10 text-[#2C6B2F]'
-                    : 'border-slate-200 bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:border-[#2C6B2F]/25 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]',
-                )}
-              >
-                <ChevronRight size={13} />
-              </button>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-slate-400">
+                  <span className="font-mono font-semibold text-slate-500">{(row.stockAvailable ?? 0).toFixed(2)}</span>
+                  {row.unitOfMeasure && <> {row.unitOfMeasure}</>}
+                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    title="Editar ítem"
+                    disabled={editingId === row.id}
+                    onClick={e => { e.stopPropagation(); onEdit(row) }}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F] disabled:opacity-100"
+                  >
+                    {editingId === row.id
+                      ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
+                      : <Pencil size={13} />}
+                  </button>
+                  <button
+                    title="Ver ficha del ítem"
+                    onClick={e => { e.stopPropagation(); onNavigate(row) }}
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition',
+                      isSel
+                        ? 'border-[#2C6B2F]/20 bg-[#2C6B2F]/10 text-[#2C6B2F]'
+                        : 'border-slate-200 bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:border-[#2C6B2F]/25 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]',
+                    )}
+                  >
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              </div>
             </div>
           )
         })}
