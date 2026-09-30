@@ -1581,6 +1581,15 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
             {manualWeight && (
               <span className="text-[12.5px] text-[#98A2B3]">Peso manual por ítem</span>
             )}
+            {!manualWeight && weightMethod && (
+              <span className="text-[12.5px] text-[#475467]">
+                <span className="font-semibold text-[#344054]">{weightMethod}</span>
+                {' · Peso específico: '}
+                <span className="font-mono">{specificWeight ? Number(specificWeight).toFixed(2).replace('.', ',') : '—'} Kg./M3.</span>
+                {' · Dimensión: '}
+                <span className="font-mono">{nominalDimension ? Number(nominalDimension).toFixed(2).replace('.', ',') : '—'}</span>
+              </span>
+            )}
           </div>
 
           {!manualWeight && weightMethod && (
@@ -2218,7 +2227,7 @@ export function CodificacionPage() {
       <FormDialog
         open={sheet === 'item-class'}
         title={editClass ? 'Modificar Clase' : 'Nueva Clase'}
-        subtitle={selSeg ? `Segmento ${selSeg.code} — ${selSeg.name}` : undefined}
+        subtitle={selSeg ? `Segmento: ${selSeg.code} — ${selSeg.name}${selFam ? `\nFamilia: ${selFam.name}` : ''}` : undefined}
         width="w-[640px]"
         onClose={() => setSheet(null)}
       >

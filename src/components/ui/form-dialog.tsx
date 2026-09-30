@@ -50,7 +50,7 @@ export function FormDialog({ open, title, subtitle, onClose, children, width = '
                 {title}
               </Dialog.Title>
               {subtitle && (
-                <p className="mt-1 text-[14px] text-[#667085]">{subtitle}</p>
+                <p className="mt-1 whitespace-pre-line text-[14px] text-[#667085]">{subtitle}</p>
               )}
             </div>
             <Dialog.Close
