@@ -84,7 +84,7 @@ export function FormActions({
   onClose: () => void
 }) {
   return (
-    <div className="mt-8 flex items-center gap-5">
+    <div className="sticky bottom-0 -mx-10 mt-8 flex items-center gap-5 border-t border-[#F2F4F7] bg-white px-10 pb-1 pt-5">
       <button
         type="button"
         onClick={onClose}
