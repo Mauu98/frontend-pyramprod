@@ -64,13 +64,18 @@ export function FormDialog({ open, title, subtitle, onClose, children, width = '
           {/* Divider */}
           <div className="mx-10 border-t border-[#F2F4F7]" />
 
-          {/* Body */}
-          <div className="relative min-h-0 flex-1">
-            <div ref={bodyRef} className="h-full overflow-y-auto px-10 py-8 [scrollbar-gutter:stable]">
-              {children}
-            </div>
+          {/* Body — overflow lives directly on this flex item, not on a `h-full` grandchild.
+              Dialog.Content only sets max-height (not height), so it never has a spec-"definite"
+              height; a percentage-height (`h-full`) or `absolute inset-0` descendant then fails to
+              resolve against it in Chromium and either grows to its own content's size (spilling
+              past the dialog's clipped edge, including the footer) or collapses to zero. The flex
+              item's OWN box, though, is correctly resolved by the flex algorithm itself (confirmed:
+              its rendered height reliably matches "available space minus the other rows") — putting
+              overflow-y-auto there instead sidesteps the percentage-height quirk entirely. */}
+          <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-10 py-8 [scrollbar-gutter:stable]">
+            {children}
             {hasMoreBelow && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white to-transparent" />
+              <div className="pointer-events-none sticky bottom-0 -mt-10 h-10 bg-gradient-to-t from-white to-transparent" />
             )}
           </div>
         </Dialog.Content>
