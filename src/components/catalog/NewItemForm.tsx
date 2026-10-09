@@ -7,6 +7,7 @@ import { translateApiError } from '@/lib/api-error'
 import type { ItemClass, ItemDetail, ItemSummary, WeightMethod } from '@/types/api.types'
 import { Search, Weight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isUnitSegment } from '@/lib/unit-segments'
 import {
   FormField, FormSection, FormActions, ErrorBanner,
   inputBase, inputError,
@@ -109,8 +110,7 @@ function MaterialPicker({ value, onChange }: { value: string; onChange: (code: s
   )
 }
 
-// Segments that work with raw materials — from Python: digi_und = [4,5,7,8,9] (no material)
-const SEGMENTS_WITHOUT_MATERIAL = new Set(['4', '5', '7', '8', '9'])
+// Unit segments (legacy digi_und plus segment 0) do not work with raw materials — see lib/unit-segments.
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 export function NewItemForm({ open, itemType, onSave, onClose }: {
@@ -125,7 +125,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
   const [matName, setMatName] = useState(itemType.materialName ?? '')
   const [matCode, setMatCode] = useState(itemType.material ?? '')
 
-  const requiresMaterial = !SEGMENTS_WITHOUT_MATERIAL.has(itemType.segmentCode)
+  const requiresMaterial = !isUnitSegment(itemType.segmentCode)
 
   const d1 = parseFloat(watched.d1 || '0') || 0
   const d2 = parseFloat(watched.d2 || '0') || 0
@@ -164,6 +164,11 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
     'Mm.': 'Largo (mm)', 'Mm2.': 'Ancho (mm)', 'Mm3.': 'Largo (mm)',
     'Kg./Und': 'Peso/pieza (kg)', 'Und/Kg.': 'Piezas/kg',
   }
+  // Legacy habilidimm() (codificacion_c_02.pyw:1191-1233): any Kg./Und class shows the "[Kg./Item]"
+  // suffix with dim3 locked (mapDims fixes it to 1); "Desarrollo:" applies to unit segments only,
+  // where coef 1 x factor 1 makes that value the unit weight.
+  const isKgPerUnit = unit === 'Kg./Und'
+  const isUnitLabel = isUnitSegment(itemType.segmentCode)
   const d2Label = unit === 'Mm2.' ? 'Largo (mm)' : unit === 'Mm3.' ? 'Alto (mm)' : 'Dim 2'
 
   const onSubmit = (v: FormValues) => {
@@ -192,7 +197,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
     >
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
 
-            {/* Material — only for segments 0,1,2,3,6 */}
+            {/* Material — only for segments 1,2,3,6 (not unit segments) */}
             {requiresMaterial && (
             <FormSection title="Material" first>
               {itemType.material ? (
@@ -217,11 +222,17 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
                 </div>
               )}
               <div className={cn('grid gap-4', needD3 ? 'grid-cols-3' : needD2 ? 'grid-cols-2' : 'grid-cols-1')}>
-                <FormField label={unit ? d1Label[unit] : 'Desarrollo / dim1'} optional>
-                  <input type="number" step="0.001" min="0" placeholder="0.000"
-                    {...register('d1')}
-                    className={inputBase}
-                  />
+                <FormField
+                  label={isUnitLabel ? 'Desarrollo:' : unit ? d1Label[unit] : 'Desarrollo / dim1'}
+                  optional
+                >
+                  <div className="flex items-center gap-2">
+                    <input type="number" step="0.001" min="0" placeholder="0.000"
+                      {...register('d1')}
+                      className={inputBase}
+                    />
+                    {isKgPerUnit && <span className="shrink-0 text-[13px] text-[#555555]">[Kg./Item]</span>}
+                  </div>
                 </FormField>
                 {needD2 && (
                 <FormField label={d2Label} optional>

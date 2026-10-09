@@ -7,11 +7,16 @@ import { FormDialog } from '@/components/ui/form-dialog'
 import { translateApiError } from '@/lib/api-error'
 import { FormActions, ErrorBanner, FormField, FormSection } from '@/components/ui/form-field'
 import { inputBase, textareaBase } from '@/components/ui/form-tokens'
+import { isUnitSegment } from '@/lib/unit-segments'
 
 export function EditItemDialog({ open, item, onClose, onSaved }: {
   open: boolean; item: ItemDetail; onClose: () => void; onSaved: () => void
 }) {
   const qc = useQueryClient()
+  // Legacy habilidimm() (codificacion_c_02.pyw:1191-1233): any Kg./Und class shows the "[Kg./Item]"
+  // suffix with dim3 locked; the "Desarrollo:" label applies to unit segments only.
+  const isKgPerUnit = item.weightMethod === 'Kg./Und'
+  const isUnitLabel = isUnitSegment(item.classSegmentCode)
   const [apiErr, setApiErr] = useState<string | null>(null)
 
   const { register, handleSubmit, reset } = useForm({
@@ -140,12 +145,17 @@ export function EditItemDialog({ open, item, onClose, onSaved }: {
 
         <FormSection title="Dimensiones y stock">
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="Dimensión 2" optional>
-              <input type="number" step="0.001" {...register('dim2')} className={inputBase} placeholder="0.000" />
+            <FormField label={isUnitLabel ? 'Desarrollo:' : 'Dimensión 2'} optional>
+              <div className="flex items-center gap-2">
+                <input type="number" step="0.001" {...register('dim2')} className={inputBase} placeholder="0.000" />
+                {isKgPerUnit && <span className="shrink-0 text-[13px] text-[#555555]">[Kg./Item]</span>}
+              </div>
             </FormField>
+            {!isKgPerUnit && (
             <FormField label="Dimensión 3" optional>
               <input type="number" step="0.001" {...register('dim3')} className={inputBase} placeholder="0.000" />
             </FormField>
+            )}
             <FormField label="Stock mínimo" optional>
               <input type="number" step="0.001" {...register('stockMin')} className={inputBase} placeholder="0.000" />
             </FormField>

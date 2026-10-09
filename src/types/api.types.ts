@@ -116,6 +116,8 @@ export interface ItemDetail {
   operationComplement: string | null
   functionName: string | null
   weightMethod: WeightMethod | null
+  /** Taxonomy segment code of the item's class (not the item's own 3-digit segmentCode). */
+  classSegmentCode: string
   /** Denormalized from the item's class — present only when the class uses manual weight entry. */
   manualWeight: boolean | null
 }

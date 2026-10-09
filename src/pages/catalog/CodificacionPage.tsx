@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isUnitSegment } from '@/lib/unit-segments'
 import imgRedondo from '@/assets/materials/redondo.png'
 import imgTuboRedondo from '@/assets/materials/tubo_redondo.png'
 import imgCuadrado from '@/assets/materials/cuadrado.png'
@@ -1415,16 +1416,23 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  // Unit segments (digi_und + segment 0) skip the weight step: NEW classes are fixed to Kg./Und, 1, 1.
+  // An already-saved class never changes its weight config from here (the backend ignores it too):
+  // it is shown read-only exactly as stored, including "no config".
+  const unitSegment = isUnitSegment(segmentCode)
+  const preservedUnitConfig = unitSegment && !!item
+  const fixUnitConfig = unitSegment && !preservedUnitConfig
+  const hasStoredConfig = !!item && (item.manualWeight || item.weightMethod != null)
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
       name:             item?.name ?? '',
       abbreviation:     item?.abbreviation ?? '',
       description:      item?.description ?? '',
       familyId,
-      weightMethod:     item?.weightMethod ?? '',
-      manualWeight:     item?.manualWeight ?? false,
-      specificWeight:   item?.specificWeight != null ? String(item.specificWeight) : '',
-      nominalDimension: item?.nominalDimension != null ? String(item.nominalDimension) : '',
+      weightMethod:     fixUnitConfig ? 'Kg./Und' : (item?.weightMethod ?? ''),
+      manualWeight:     fixUnitConfig ? false : (item?.manualWeight ?? false),
+      specificWeight:   fixUnitConfig ? '1' : (item?.specificWeight != null ? String(item.specificWeight) : ''),
+      nominalDimension: fixUnitConfig ? '1' : (item?.nominalDimension != null ? String(item.nominalDimension) : ''),
       material:         item?.material ?? '',
       materialName:     item?.materialName ?? '',
       operatorName:     item?.operatorName ?? '',
@@ -1512,7 +1520,7 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
   const onSubmit = (v: Record<string, string>) => {
     const isManualWeight = Boolean(v.manualWeight)
 
-    if (!isManualWeight && !v.weightMethod) {
+    if (!unitSegment && !isManualWeight && !v.weightMethod) {
       setWeightConfigError(t('client.weightMethodRequired'))
       return
     }
@@ -1580,6 +1588,33 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
       </FormSection>
 
       <FormSection title="Datos para pesos calculados">
+        {unitSegment ? (
+          <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                disabled
+                title="Esta clase no usa pesos calculados"
+                className="h-10 shrink-0 cursor-not-allowed rounded-lg bg-[#2C6B2F] px-4 text-[13px] font-semibold text-white opacity-40"
+              >
+                Métodos Peso Calculado
+              </button>
+              <span className="text-[12.5px] text-[#98A2B3]">
+                {preservedUnitConfig ? (hasStoredConfig ? 'Configuración existente — sólo lectura' : 'Sin método de peso') : 'Kg./Und — peso por unidad'}
+              </span>
+            </div>
+            <p className="mt-3 text-[12.5px] text-[#667085]">
+              {preservedUnitConfig
+                ? 'El método de peso de una clase existente de este segmento no se modifica desde acá.'
+                : 'Los ítems de este segmento se adquieren y consumen por unidad, sin cálculo de peso: coef. 1 × factor 1. El valor que se cargue en cada ítem es su peso por unidad.'}
+            </p>
+            {preservedUnitConfig && hasStoredConfig && (
+              <p className="mt-2 font-mono text-[12.5px] text-[#344054]">
+                {manualWeight ? 'Peso manual por ítem' : `${weightMethod} · coef. ${specificWeight || '—'} · factor ${nominalDimension || '—'}`}
+              </p>
+            )}
+          </div>
+        ) : (
         <div className="rounded-lg border border-[#E4E7EC] bg-[#FAFAFA] p-4">
           <div className="flex items-center gap-4">
             <button
@@ -1638,6 +1673,7 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
             </div>
           )}
         </div>
+        )}
 
         {weightConfigError && (
           <p className="flex items-center gap-1.5 text-[13px] text-red-500">
@@ -1646,7 +1682,7 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
           </p>
         )}
 
-        {weightWizardOpen && (
+        {!unitSegment && weightWizardOpen && (
           <WeightWizardDialog
             open={weightWizardOpen}
             onClose={() => setWeightWizardOpen(false)}
