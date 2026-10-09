@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { Plus, Pencil, Trash2, Ruler, AlertTriangle, Check, X, ArrowRightLeft } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { translateApiError } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { FormField, FormActions, ErrorBanner } from '@/components/ui/form-field'
@@ -137,7 +138,7 @@ function EquivalenciesDialog({ measure, onClose, allMeasures }: {
                   </select>
                 </FormField>
               </div>
-              {addMut.isError && <ErrorBanner message="No se pudo agregar la equivalencia." />}
+              {addMut.isError && <ErrorBanner message={translateApiError(addMut.error, 'fallback.addEquivalency')} />}
               <FormActions pending={addMut.isPending} isEdit={false} label="Agregar" onClose={onClose} />
             </form>
           </>
@@ -168,7 +169,7 @@ function MeasureCreateDialog({ onClose }: { onClose: () => void }) {
             autoFocus
           />
         </FormField>
-        {m.isError && <ErrorBanner message="No se pudo guardar la unidad de medida." />}
+        {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.saveMeasure')} />}
         <FormActions pending={m.isPending} isEdit={false} label="Crear unidad" onClose={onClose} />
       </form>
     </FormDialog>

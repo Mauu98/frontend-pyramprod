@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api-client'
+import { translateApiError } from '@/lib/api-error'
 import type { ItemClass, ItemDetail, ItemSummary, WeightMethod } from '@/types/api.types'
 import { Search, Weight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -114,6 +116,7 @@ const SEGMENTS_WITHOUT_MATERIAL = new Set(['4', '5', '7', '8', '9'])
 export function NewItemForm({ open, itemType, onSave, onClose }: {
   open: boolean; itemType: ItemClass; onSave: (item: ItemDetail) => void; onClose: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { register, handleSubmit, control, formState: { errors } } = useForm<FormValues>({
     defaultValues: { d1: '', d2: '', d3: '', func: '', complement: '', weightInput: '' },
@@ -198,7 +201,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
                   <span className="text-[14px] text-[#1A1A1A]">{itemType.materialName}</span>
                 </div>
               ) : (
-                <FormField label="Materia prima" required error={!!errors && !matCode ? 'Seleccioná una materia prima' : undefined}>
+                <FormField label="Materia prima" required error={!!errors && !matCode ? t('client.materialRequired') : undefined}>
                   <MaterialPicker value={matCode} onChange={(c, n) => { setMatCode(c); setMatName(n) }} />
                 </FormField>
               )}
@@ -261,7 +264,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
                 <input {...register('complement')} className={inputBase} placeholder="Ej: galvanizado, pintado..." />
               </FormField>
               <FormField label="Función / propósito" required
-                error={errors.func ? 'Campo requerido' : undefined}
+                error={errors.func ? t('client.required') : undefined}
                 helper="Ej: Soporte lateral, Tapa frontal, Refuerzo de base...">
                 <input {...register('func', { required: true, maxLength: 65 })}
                   placeholder="Ej: Soporte lateral, Tapa frontal..."
@@ -282,7 +285,7 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
               </div>
             )}
 
-            {m.isError && <ErrorBanner />}
+            {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.save')} />}
 
             <FormActions pending={m.isPending} isEdit={false} label="Crear ítem" onClose={onClose} />
       </form>

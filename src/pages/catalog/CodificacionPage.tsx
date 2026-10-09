@@ -4,7 +4,9 @@ import * as XLSX from 'xlsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api-client'
+import { translateApiError } from '@/lib/api-error'
 import { FormDialog } from '@/components/ui/form-dialog'
 import {
   FormField, FormSection, FormActions, ParentBadge, ErrorBanner,
@@ -35,21 +37,6 @@ type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'renam
 interface ColRow { id: number; code: string; name: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function getErrMsg(err: unknown): string {
-  const d = (err as { response?: { data?: { code?: string; message?: string } } })?.response?.data
-  if (!d) return 'No se pudo completar la operación. Verificá la conexión.'
-  const byCode: Record<string, string> = {
-    SEGMENT_HAS_FAMILIES:    'El segmento tiene familias. Eliminá las familias primero.',
-    FAMILY_HAS_ITEM_CLASSES: 'La familia tiene clases. Eliminá las clases primero.',
-    ITEM_CLASS_HAS_ITEMS:    'La clase tiene ítems. Eliminá los ítems primero.',
-  }
-  return d.code ? (byCode[d.code] ?? d.message ?? 'Error desconocido.') : (d.message ?? 'No se pudo completar.')
-}
-
-function getSaveErrMsg(err: unknown): string | undefined {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-}
-
 // ─── Stat tile ────────────────────────────────────────────────────────────────
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -640,7 +627,7 @@ function BatchImportForm({ typeId, typeLabel, onSave, onClose }: {
       qc.invalidateQueries({ queryKey: ['items', typeId] })
       onSave()
     },
-    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar los ítems.'),
+    onError: err => setSubmitError(translateApiError(err, 'fallback.importItems')),
   })
 
   return (
@@ -687,6 +674,7 @@ function BatchImportForm({ typeId, typeLabel, onSave, onClose }: {
 function RenameForm({ typeId, typeLabel, onSave, onClose }: {
   typeId: number; typeLabel: string; onSave: () => void; onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'simple' | 'batch'>('simple')
 
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -732,7 +720,7 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
 
       {mode === 'simple' && (
         <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
-          <FormField label="Buscar" required error={!!errors.search && 'Campo requerido'}>
+          <FormField label="Buscar" required error={!!errors.search && t('client.required')}>
             <input
               {...register('search', { required: true })}
               className={cn(inputBase, errors.search && inputError)}
@@ -746,7 +734,7 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
               placeholder="Nuevo texto (vacío para eliminar)"
             />
           </FormField>
-          {m.isError && <ErrorBanner message="No se pudo ejecutar el reemplazo. Verificá los datos." />}
+          {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.replace')} />}
           <FormActions pending={m.isPending} isEdit={false} label="Ejecutar reemplazo" onClose={onClose} />
         </form>
       )}
@@ -754,7 +742,7 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
       {mode === 'batch' && (
         <form onSubmit={handleSubmitBatch(d => mBatch.mutate(d))} className="flex flex-col gap-7">
           <FormField
-            label="Pares a reemplazar" required error={!!batchErrors.text && 'Campo requerido'}
+            label="Pares a reemplazar" required error={!!batchErrors.text && t('client.required')}
             helper='Una sustitución por línea, separada por ";". Ej: "PLA;#" reemplaza PLA por #, "PLA;" elimina PLA.'
           >
             <textarea
@@ -774,7 +762,7 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
               Reemplazar en abreviaturas
             </label>
           </div>
-          {mBatch.isError && <ErrorBanner message={getSaveErrMsg(mBatch.error)} />}
+          {mBatch.isError && <ErrorBanner message={translateApiError(mBatch.error, 'fallback.save')} />}
           <FormActions pending={mBatch.isPending} isEdit={false} label="Ejecutar reemplazo masivo" onClose={onClose} />
         </form>
       )}
@@ -786,6 +774,7 @@ function RenameForm({ typeId, typeLabel, onSave, onClose }: {
 function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
   familyId: number; familyLabel: string; onSave: () => void; onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'simple' | 'batch'>('simple')
 
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -835,7 +824,7 @@ function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
 
       {mode === 'simple' && (
         <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
-          <FormField label="Buscar" required error={!!errors.search && 'Campo requerido'}>
+          <FormField label="Buscar" required error={!!errors.search && t('client.required')}>
             <input
               {...register('search', { required: true })}
               className={cn(inputBase, errors.search && inputError)}
@@ -849,7 +838,7 @@ function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
               placeholder="Nuevo texto (vacío para eliminar)"
             />
           </FormField>
-          {m.isError && <ErrorBanner message="No se pudo ejecutar el reemplazo. Verificá los datos." />}
+          {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.replace')} />}
           <FormActions pending={m.isPending} isEdit={false} label="Ejecutar reemplazo" onClose={onClose} />
         </form>
       )}
@@ -857,7 +846,7 @@ function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
       {mode === 'batch' && (
         <form onSubmit={handleSubmitBatch(d => mBatch.mutate(d))} className="flex flex-col gap-7">
           <FormField
-            label="Pares a reemplazar" required error={!!batchErrors.text && 'Campo requerido'}
+            label="Pares a reemplazar" required error={!!batchErrors.text && t('client.required')}
             helper='Una sustitución por línea, separada por ";". Ej: "PLA;#" reemplaza PLA por #, "PLA;" elimina PLA.'
           >
             <textarea
@@ -877,7 +866,7 @@ function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
               Reemplazar en abreviaturas
             </label>
           </div>
-          {mBatch.isError && <ErrorBanner message={getSaveErrMsg(mBatch.error)} />}
+          {mBatch.isError && <ErrorBanner message={translateApiError(mBatch.error, 'fallback.save')} />}
           <FormActions pending={mBatch.isPending} isEdit={false} label="Ejecutar reemplazo masivo" onClose={onClose} />
         </form>
       )}
@@ -887,6 +876,7 @@ function RenameClassesForm({ familyId, familyLabel, onSave, onClose }: {
 
 // ─── Segment form ─────────────────────────────────────────────────────────────
 function SegmentForm({ item, onSave, onClose }: { item: Segment | null; onSave: () => void; onClose: () => void }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
@@ -904,7 +894,7 @@ function SegmentForm({ item, onSave, onClose }: { item: Segment | null; onSave: 
       <FormField label="Abreviatura" optional>
         <input {...register('abbreviation')} maxLength={5} className={inputBase} placeholder="ACE" />
       </FormField>
-      <FormField label="Nombre" required error={!!errors.name && 'Campo requerido'}>
+      <FormField label="Nombre" required error={!!errors.name && t('client.required')}>
         <input
           {...register('name', { required: true })}
           className={cn(inputBase, errors.name && inputError)}
@@ -914,7 +904,7 @@ function SegmentForm({ item, onSave, onClose }: { item: Segment | null; onSave: 
       <FormField label="Descripción" optional>
         <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción del segmento..." />
       </FormField>
-      {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
+      {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.save')} />}
       <FormActions pending={m.isPending} isEdit={!!item} label="Crear segmento" onClose={onClose} />
     </form>
   )
@@ -924,6 +914,7 @@ function SegmentForm({ item, onSave, onClose }: { item: Segment | null; onSave: 
 function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
   item: Family | null; segmentId: number; segmentLabel: string; onSave: () => void; onClose: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
@@ -943,7 +934,7 @@ function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
       <FormField label="Abreviatura" optional>
         <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA" />
       </FormField>
-      <FormField label="Nombre" required error={!!errors.name && 'Campo requerido'}>
+      <FormField label="Nombre" required error={!!errors.name && t('client.required')}>
         <input
           {...register('name', { required: true })}
           className={cn(inputBase, errors.name && inputError)}
@@ -953,7 +944,7 @@ function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
       <FormField label="Descripción" optional>
         <textarea {...register('description')} rows={3} className={textareaBase} placeholder="Descripción de la familia..." />
       </FormField>
-      {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
+      {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.save')} />}
       <FormActions pending={m.isPending} isEdit={!!item} label="Crear familia" onClose={onClose} />
     </form>
   )
@@ -1682,7 +1673,7 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
         </FormSection>
       )}
 
-      {m.isError && <ErrorBanner message={getSaveErrMsg(m.error)} />}
+      {m.isError && <ErrorBanner message={translateApiError(m.error, 'fallback.save')} />}
       <FormActions pending={m.isPending} isEdit={!!item} label="Crear clase" onClose={onClose} />
     </form>
   )
@@ -1704,7 +1695,7 @@ function BatchFamilyImportForm({ segmentId, segmentLabel, onSave, onClose }: {
       qc.invalidateQueries({ queryKey: ['families', segmentId] })
       onSave()
     },
-    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar las familias.'),
+    onError: err => setSubmitError(translateApiError(err, 'fallback.importFamilies')),
   })
 
   return (
@@ -1763,7 +1754,7 @@ function BatchClassImportForm({ familyId, familyLabel, onSave, onClose }: {
       qc.invalidateQueries({ queryKey: ['item-classes', familyId] })
       onSave()
     },
-    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar las clases.'),
+    onError: err => setSubmitError(translateApiError(err, 'fallback.importClasses')),
   })
 
   return (
@@ -1870,7 +1861,7 @@ function ImportClassesForm({ targetFamilyId, targetFamilyLabel, onSave, onClose 
       qc.invalidateQueries({ queryKey: ['item-classes', targetFamilyId] })
       onSave()
     },
-    onError: err => setSubmitError(getSaveErrMsg(err) ?? 'Error al importar las clases.'),
+    onError: err => setSubmitError(translateApiError(err, 'fallback.importClasses')),
   })
 
   return (
@@ -2034,7 +2025,7 @@ export function CodificacionPage() {
       if (selSeg?.id === delTarget?.row.id) { setSelSeg(null); setSelFam(null); setSelClass(null); setSelItem(null) }
       setDelTarget(null); setDelApiErr(null)
     },
-    onError: err => setDelApiErr(getErrMsg(err)),
+    onError: err => setDelApiErr(translateApiError(err)),
   })
   const deleteFamMut = useMutation({
     mutationFn: (id: number) => apiClient.delete(`/families/${id}`),
@@ -2043,7 +2034,7 @@ export function CodificacionPage() {
       if (selFam?.id === delTarget?.row.id) { setSelFam(null); setSelClass(null); setSelItem(null) }
       setDelTarget(null); setDelApiErr(null)
     },
-    onError: err => setDelApiErr(getErrMsg(err)),
+    onError: err => setDelApiErr(translateApiError(err)),
   })
   const deleteClassMut = useMutation({
     mutationFn: (id: number) => apiClient.delete(`/item-classes/${id}`),
@@ -2052,7 +2043,7 @@ export function CodificacionPage() {
       if (selClass?.id === delTarget?.row.id) { setSelClass(null); setSelItem(null) }
       setDelTarget(null); setDelApiErr(null)
     },
-    onError: err => setDelApiErr(getErrMsg(err)),
+    onError: err => setDelApiErr(translateApiError(err)),
   })
 
   const delPending = deleteSegMut.isPending || deleteFamMut.isPending || deleteClassMut.isPending

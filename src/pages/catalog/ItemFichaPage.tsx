@@ -7,6 +7,7 @@ import {
   BarChart2,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { translateApiError } from '@/lib/api-error'
 import type { ItemDetail } from '@/types/api.types'
 import { cn } from '@/lib/utils'
 import { FormDialog } from '@/components/ui/form-dialog'
@@ -285,10 +286,7 @@ function AddToProductDialog({ open, onClose, componentId, componentCode, onSaved
       quantity: Number(quantity),
     }),
     onSuccess: () => { onSaved(); onClose() },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-      setApiError(msg ?? 'No se pudo agregar el destino.')
-    },
+    onError: (err: unknown) => setApiError(translateApiError(err, 'fallback.addTarget')),
   })
 
   const canSubmit = selected && quantity && Number(quantity) > 0
@@ -502,7 +500,7 @@ function AddFormulaDialog({ open, onClose, productId, onSaved }: {
       memo: memo || null,
     }),
     onSuccess: () => { onSaved(); onClose() },
-    onError: () => setApiError('No se pudo agregar la línea.'),
+    onError: (err: unknown) => setApiError(translateApiError(err, 'fallback.addFormulaLine')),
   })
 
   const canSubmit = selected && quantity && Number(quantity) > 0
@@ -602,10 +600,7 @@ function StockAdjustDialog({ open, itemId, onClose, onSaved }: {
       futureDelta:    future    !== '' ? Number(future)    : undefined,
     }),
     onSuccess: () => { onSaved(); onClose() },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setApiErr(msg ?? 'No se pudo ajustar el stock.')
-    },
+    onError: (err: unknown) => setApiErr(translateApiError(err, 'fallback.adjustStock')),
   })
 
   const hasValue = available !== '' || future !== ''
@@ -750,10 +745,7 @@ function CopyFormulaDialog({ open, onClose, targetProductId, onSaved }: {
       onDuplicate,
     }),
     onSuccess: () => { onSaved(); onClose() },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-      setApiError(msg ?? 'No se pudo copiar la fórmula.')
-    },
+    onError: (err: unknown) => setApiError(translateApiError(err, 'fallback.copyFormula')),
   })
 
   return (

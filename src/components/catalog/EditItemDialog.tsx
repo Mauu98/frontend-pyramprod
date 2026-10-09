@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import type { ItemDetail } from '@/types/api.types'
 import { FormDialog } from '@/components/ui/form-dialog'
+import { translateApiError } from '@/lib/api-error'
 import { FormActions, ErrorBanner, FormField, FormSection } from '@/components/ui/form-field'
 import { inputBase, textareaBase } from '@/components/ui/form-tokens'
 
@@ -71,10 +72,7 @@ export function EditItemDialog({ open, item, onClose, onSaved }: {
       onSaved()
       onClose()
     },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setApiErr(msg ?? 'No se pudo guardar los cambios.')
-    },
+    onError: (err: unknown) => setApiErr(translateApiError(err, 'fallback.editItem')),
   })
 
   const onSubmit = (v: Record<string, string>) => {
