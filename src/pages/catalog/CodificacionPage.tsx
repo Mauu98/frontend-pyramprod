@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { apiClient } from '@/lib/api-client'
 import { translateApiError } from '@/lib/api-error'
 import { FormDialog } from '@/components/ui/form-dialog'
@@ -60,17 +61,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ─── Context panel ────────────────────────────────────────────────────────────
 function ContextPanel({
-  selSeg, selFam, selClass, selItem, onNavigate,
+  selSeg, selFam, selClass, selItem, onNavigate, blocked,
 }: {
   selSeg:    Segment | null
   selFam:    Family | null
   selClass:  ItemClass | null
   selItem:   ItemSummary | null
   onNavigate: (r: ItemSummary) => void
+  blocked?: boolean
 }) {
   if (!selSeg) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-5 bg-[#f7f8fa] p-10 text-center">
+      <div className="flex min-w-[200px] flex-1 flex-col items-center justify-center gap-5 bg-[#f7f8fa] p-10 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm">
           <Layers size={26} strokeWidth={1.2} className="text-slate-300" />
         </div>
@@ -84,7 +86,7 @@ function ContextPanel({
 
   if (selItem) {
     return (
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
+      <div className="flex min-w-[200px] flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <div className="border-b border-gray-100 bg-[#2C6B2F]/5 px-5 py-4">
             <div className="flex items-center gap-3">
@@ -108,7 +110,8 @@ function ContextPanel({
         </div>
         <button
           onClick={() => onNavigate(selItem)}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2C6B2F] text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#245A27] active:bg-[#1E4B21]"
+          disabled={blocked}
+          className="flex h-11 w-full disabled:pointer-events-none disabled:opacity-40 items-center justify-center gap-2 rounded-xl bg-[#2C6B2F] text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#245A27] active:bg-[#1E4B21]"
         >
           Ver ficha completa
           <ChevronRight size={15} />
@@ -119,7 +122,7 @@ function ContextPanel({
 
   if (selClass) {
     return (
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
+      <div className="flex min-w-[200px] flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <div className="border-b border-gray-100 bg-[#2C6B2F]/5 px-5 py-4">
             <div className="flex items-center gap-3">
@@ -160,7 +163,7 @@ function ContextPanel({
 
   if (selFam) {
     return (
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
+      <div className="flex min-w-[200px] flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <div className="border-b border-gray-100 bg-[#2C6B2F]/5 px-5 py-4">
             <div className="flex items-center gap-3">
@@ -190,7 +193,7 @@ function ContextPanel({
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
+    <div className="flex min-w-[200px] flex-1 flex-col gap-4 overflow-y-auto bg-[#f7f8fa] p-6">
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 bg-[#2C6B2F]/5 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -296,14 +299,14 @@ const SINGULAR: Record<string, string> = {
 
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
-  onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, onRename, sortable, width = 'w-[272px]',
+  onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, onRename, sortable, width = 'w-[272px]', blocked,
 }: {
   title: string; icon: LucideIcon; rows: ColRow[]; selected: ColRow | null
   isLoading?: boolean; enabled: boolean; placeholderText: string
   onSelect: (r: ColRow) => void; onNew: () => void
   onEdit: (r: ColRow) => void; onDelete: (r: ColRow) => void
   onBatch?: () => void; onCopy?: () => void; onExport?: () => void; onRename?: () => void
-  sortable?: boolean; width?: string
+  sortable?: boolean; width?: string; blocked?: boolean
 }) {
   const [q, setQ] = useState('')
   const [sortMode, setSortMode] = useState<'code' | 'name'>('code')
@@ -317,7 +320,7 @@ function CatalogColumn({
 
   return (
     <div className={cn(
-      'flex shrink-0 flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
+      'flex min-w-[290px] shrink flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
       width,
       !enabled && 'pointer-events-none opacity-25',
     )}>
@@ -352,8 +355,9 @@ function CatalogColumn({
             {onCopy && (
               <button
                 onClick={onCopy}
+                disabled={blocked}
                 title={`Importar ${singular}s de otra familia`}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 <Copy size={13} />
               </button>
@@ -361,8 +365,9 @@ function CatalogColumn({
             {onBatch && (
               <button
                 onClick={onBatch}
+                disabled={blocked}
                 title={`Importar ${singular}s desde texto`}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 <ListPlus size={13} />
               </button>
@@ -370,16 +375,18 @@ function CatalogColumn({
             {onRename && (
               <button
                 onClick={onRename}
+                disabled={blocked}
                 title={`Renombrar ${singular}s en lote`}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 <Replace size={13} />
               </button>
             )}
             <button
               onClick={onNew}
+              disabled={blocked}
               title={`Nuevo ${singular}`}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95 disabled:pointer-events-none disabled:opacity-40"
             >
               <Plus size={13} />
             </button>
@@ -446,14 +453,16 @@ function CatalogColumn({
                 <button
                   title={`Editar ${singular}`}
                   onClick={e => { e.stopPropagation(); onEdit(row) }}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]"
+                  disabled={blocked}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg disabled:pointer-events-none disabled:opacity-30 text-slate-400 transition hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]"
                 >
                   <Pencil size={13} />
                 </button>
                 <button
                   title={`Eliminar ${singular}`}
                   onClick={e => { e.stopPropagation(); onDelete(row) }}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                  disabled={blocked}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg disabled:pointer-events-none disabled:opacity-30 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -467,18 +476,18 @@ function CatalogColumn({
 }
 
 // ─── Items column ─────────────────────────────────────────────────────────────
-function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate, onEdit, editingId, onNew, onBatch, onRename }: {
+function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate, onEdit, editingId, onNew, onBatch, onRename, blocked }: {
   rows: ItemSummary[]; selected: ItemSummary | null; isLoading?: boolean; enabled: boolean
   onSelect: (r: ItemSummary) => void; onNavigate: (r: ItemSummary) => void; onEdit: (r: ItemSummary) => void
   editingId?: number | null
-  onNew: () => void; onBatch: () => void; onRename: () => void
+  onNew: () => void; onBatch: () => void; onRename: () => void; blocked?: boolean
 }) {
   const [q, setQ] = useState('')
   const filtered = rows.filter(r => !q || r.fullName.toLowerCase().includes(q) || r.fullCode.toLowerCase().includes(q))
 
   return (
     <div className={cn(
-      'flex w-[320px] shrink-0 flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
+      'flex w-[320px] min-w-[260px] shrink flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
       !enabled && 'pointer-events-none opacity-25',
     )}>
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-100 bg-[#f7f8fa] pl-5 pr-7">
@@ -492,25 +501,25 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={onBatch}
-            disabled={!enabled}
+            disabled={!enabled || blocked}
             title="Importar ítems desde texto"
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            className={cn("flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0", blocked && 'disabled:opacity-40!')}
           >
             <ListPlus size={13} />
           </button>
           <button
             onClick={onRename}
-            disabled={!enabled}
+            disabled={!enabled || blocked}
             title="Renombrar en lote"
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            className={cn("flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0", blocked && 'disabled:opacity-40!')}
           >
             <Replace size={13} />
           </button>
           <button
             onClick={onNew}
-            disabled={!enabled}
+            disabled={!enabled || blocked}
             title="Nuevo ítem"
-            className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            className={cn("flex h-7 w-7 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95 disabled:pointer-events-none disabled:opacity-0", blocked && 'disabled:opacity-40!')}
           >
             <Plus size={13} />
           </button>
@@ -551,7 +560,7 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
             <div
               key={row.id}
               onClick={() => onSelect(row)}
-              onDoubleClick={() => onNavigate(row)}
+              onDoubleClick={() => { if (!blocked) onNavigate(row) }}
               title="Doble click para ver ficha"
               className={cn(
                 'group relative flex cursor-pointer flex-col gap-1.5 border-b border-gray-50 px-5 py-3 transition-colors duration-100',
@@ -581,9 +590,9 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     title="Editar ítem"
-                    disabled={editingId === row.id}
+                    disabled={editingId === row.id || blocked}
                     onClick={e => { e.stopPropagation(); onEdit(row) }}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F] disabled:opacity-100"
+                    className={cn(blocked && editingId !== row.id && 'pointer-events-none opacity-40! group-hover:opacity-40!', "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F] disabled:opacity-100")}
                   >
                     {editingId === row.id
                       ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
@@ -592,7 +601,9 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
                   <button
                     title="Ver ficha del ítem"
                     onClick={e => { e.stopPropagation(); onNavigate(row) }}
+                    disabled={blocked}
                     className={cn(
+                      blocked && 'pointer-events-none opacity-40! group-hover:opacity-40!',
                       'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition',
                       isSel
                         ? 'border-[#2C6B2F]/20 bg-[#2C6B2F]/10 text-[#2C6B2F]'
@@ -1384,6 +1395,12 @@ const NAME_HELP_BY_MODE: Record<DimMode, string> = {
   'Mm2.': 'Esta clase consume por región de corte (modalidad 2): el nombre debe hacer referencia al espesor (u otro dato con sentido comercial) que identifique al material.',
   'Mm3.': 'Esta clase es de tratamiento por volumen (modalidad 3): acá no hace falta especificar dimensiones, esas se estipulan en el último paso de la codificación.',
 }
+/** Validates a required class text field: non-blank and without ";" (reserved as the bulk-replace separator). */
+function validateClassField(value: string, requiredMsg: string, t: TFunction): true | string {
+  if (!value.trim()) return requiredMsg
+  if (value.includes(';')) return t('client.noSemicolon')
+  return true
+}
 const ABBR_HELP = 'Abreviatura corta que identifica esta clase dentro de los códigos de sus ítems. Validá que no se repita con otra clase de la misma familia.'
 
 // ─── Item class form ──────────────────────────────────────────────────────────
@@ -1396,6 +1413,7 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
   onSave: () => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
@@ -1434,15 +1452,19 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
   const handleValidate = () => {
     const trimmedName = name.trim()
     const trimmedAbbr = abbreviation.trim()
-    if (!trimmedName) {
-      setValidateMsg({ ok: false, text: 'Ingresá un nombre antes de validar.' })
+    const fieldError = [
+      validateClassField(name, t('client.nameBeforeValidate'), t),
+      validateClassField(abbreviation, t('client.abbreviationBeforeValidate'), t),
+    ].find(r => r !== true)
+    if (fieldError) {
+      setValidateMsg({ ok: false, text: fieldError })
       return
     }
     const siblings = existingClasses.filter(c => c.id !== item?.id)
     const dupName = siblings.some(c => c.name.trim().toLowerCase() === trimmedName.toLowerCase())
     const dupAbbr = trimmedAbbr && siblings.some(c => (c.abbreviation ?? '').trim().toLowerCase() === trimmedAbbr.toLowerCase())
-    if (dupName) { setValidateMsg({ ok: false, text: 'Ya existe una clase con ese nombre en esta familia.' }); return }
-    if (dupAbbr) { setValidateMsg({ ok: false, text: 'Ya existe una clase con esa abreviatura en esta familia.' }); return }
+    if (dupName) { setValidateMsg({ ok: false, text: t('client.duplicateClassName') }); return }
+    if (dupAbbr) { setValidateMsg({ ok: false, text: t('client.duplicateClassAbbreviation') }); return }
     setValidated(true)
     setValidateMsg({ ok: true, text: 'Nombre y abreviatura disponibles.' })
   }
@@ -1491,15 +1513,15 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
     const isManualWeight = Boolean(v.manualWeight)
 
     if (!isManualWeight && !v.weightMethod) {
-      setWeightConfigError('Elegí un método de cálculo de peso o marcá "Introducir peso manualmente".')
+      setWeightConfigError(t('client.weightMethodRequired'))
       return
     }
     setWeightConfigError(null)
 
     m.mutate({
       familyId,
-      name:             v.name,
-      abbreviation:     v.abbreviation || null,
+      name:             v.name.trim(),
+      abbreviation:     v.abbreviation.trim(),
       description:      v.description || null,
       weightMethod:     isManualWeight ? null : (v.weightMethod || null),
       manualWeight:     isManualWeight,
@@ -1518,16 +1540,22 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
       <ParentBadge label="Familia" value={familyLabel} />
 
       <FormSection title="Identificación" first>
-        <FormField label="Nombre / Especificación" required error={!!errors.name && 'Campo requerido'}
+        {item && <ParentBadge label="Código de clase" value={item.code} />}
+        <FormField label="Nombre / Especificación" required error={errors.name?.message}
           helper='Ej: PLA SAE1010 1"x1/8"' labelExtra={<HelpTip text={nameHelpText} />}>
           <input
-            {...register('name', { required: true })}
+            {...register('name', { validate: v => validateClassField(v, t('client.nameRequired'), t) })}
             className={cn(inputBase, errors.name && inputError)}
             placeholder='Ej: PLA SAE1010 1"x1/8"'
           />
         </FormField>
-        <FormField label="Abreviatura" optional labelExtra={<HelpTip text={ABBR_HELP} />}>
-          <input {...register('abbreviation')} maxLength={25} className={inputBase} placeholder="PLA1-1/8" />
+        <FormField label="Abreviatura" required error={errors.abbreviation?.message} labelExtra={<HelpTip text={ABBR_HELP} />}>
+          <input
+            {...register('abbreviation', { validate: v => validateClassField(v, t('client.abbreviationRequired'), t) })}
+            maxLength={25}
+            className={cn(inputBase, errors.abbreviation && inputError)}
+            placeholder="PLA1-1/8"
+          />
         </FormField>
         <FormField label="Descripción" optional>
           <textarea {...register('description')} rows={2} className={textareaBase} />
@@ -1977,7 +2005,10 @@ export function CodificacionPage() {
   const [selFam,   setSelFam]   = useState<Family | null>(saved.selFam)
   const [selClass, setSelClass] = useState<ItemClass | null>(saved.selClass)
   const [selItem,  setSelItem]  = useState<ItemSummary | null>(saved.selItem)
-  const [sheet,    setSheet]    = useState<SheetKind>(null)
+  const [sheet,    setSheetRaw] = useState<SheetKind>(null)
+  // While a (non-modal) bulk-rename sheet is open, other sheet openers are no-ops so the typed text isn't discarded.
+  const renameOpen = sheet === 'rename' || sheet === 'class-rename'
+  const setSheet = (k: SheetKind) => { if (renameOpen && k !== null) return; setSheetRaw(k) }
 
   useEffect(() => {
     sessionStorage.setItem(SEL_KEY, JSON.stringify({ selSeg, selFam, selClass, selItem }))
@@ -1986,10 +2017,14 @@ export function CodificacionPage() {
   const [editSeg,   setEditSeg]   = useState<Segment | null>(null)
   const [editFam,   setEditFam]   = useState<Family | null>(null)
   const [editClass, setEditClass] = useState<ItemClass | null>(null)
+  // Bulk-rename dialogs are non-modal: freeze their target at open time so selecting another row behind them doesn't retarget.
+  const [renameTarget, setRenameTarget] = useState<{ id: number; label: string } | null>(null)
+  const closeRename = () => { setRenameTarget(null); setSheetRaw(null) }
   const [editItemId, setEditItemId] = useState<number | null>(null)
 
   const [delTarget, setDelTarget] = useState<{ kind: 'segment' | 'family' | 'item-class'; row: ColRow } | null>(null)
   const [delApiErr, setDelApiErr] = useState<string | null>(null)
+  const [editLoadErr, setEditLoadErr] = useState<string | null>(null)
 
   const { data: segments = [], isLoading: loadSegs } = useQuery({
     queryKey: ['segments'],
@@ -2014,7 +2049,12 @@ export function CodificacionPage() {
   // so it's fetched on demand the moment the user clicks "Editar" on a row.
   const { data: editItemDetail, isFetching: loadingEditItem } = useQuery({
     queryKey: ['item-detail', editItemId],
-    queryFn:  () => apiClient.get<ItemDetail>(`/items/${editItemId}`).then(r => r.data),
+    queryFn:  () => apiClient.get<ItemDetail>(`/items/${editItemId}`).then(r => r.data).catch(err => {
+      // Release the page lock (editItemId feeds `blocked`) and surface the failure.
+      setEditItemId(null)
+      setEditLoadErr(translateApiError(err, 'fallback.loadItem'))
+      throw err
+    }),
     enabled:  !!editItemId,
   })
 
@@ -2064,12 +2104,14 @@ export function CodificacionPage() {
   ].filter(Boolean) as string[]
 
   const openNew  = (kind: SheetKind) => {
+    if (renameOpen) return
     if (kind === 'segment')    setEditSeg(null)
     if (kind === 'family')     setEditFam(null)
     if (kind === 'item-class') setEditClass(null)
     setSheet(kind)
   }
   const openEdit = (kind: SheetKind, row: Segment | Family | ItemClass) => {
+    if (renameOpen) return
     if (kind === 'segment')    setEditSeg(row as Segment)
     if (kind === 'family')     setEditFam(row as Family)
     if (kind === 'item-class') setEditClass(row as ItemClass)
@@ -2117,10 +2159,12 @@ export function CodificacionPage() {
         </div>
       </div>
 
-      <div className="mx-6 mb-6 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      {editLoadErr && <div className="mx-6 mb-3"><ErrorBanner message={editLoadErr} /></div>}
+      <div className="mx-6 mb-6 flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex h-full w-full">
 
           <CatalogColumn
+            blocked={renameOpen || editItemId != null}
             title="Segmentos" icon={LayoutGrid} rows={segments} selected={selSeg}
             isLoading={loadSegs} enabled={true} placeholderText="" width="w-[320px]"
             onSelect={row => {
@@ -2129,11 +2173,12 @@ export function CodificacionPage() {
             }}
             onNew={() => openNew('segment')}
             onEdit={row => openEdit('segment', segments.find(s => s.id === row.id)!)}
-            onDelete={row => { setDelTarget({ kind: 'segment', row }); setDelApiErr(null) }}
+            onDelete={row => { if (renameOpen) return; setDelTarget({ kind: 'segment', row }); setDelApiErr(null) }}
             sortable
           />
 
           <CatalogColumn
+            blocked={renameOpen || editItemId != null}
             title="Familias" icon={FolderOpen} rows={families} selected={selFam}
             isLoading={loadFams} enabled={!!selSeg} placeholderText="Seleccioná un segmento"
             onSelect={row => {
@@ -2142,7 +2187,7 @@ export function CodificacionPage() {
             }}
             onNew={() => openNew('family')}
             onEdit={row => openEdit('family', families.find(f => f.id === row.id)!)}
-            onDelete={row => { setDelTarget({ kind: 'family', row }); setDelApiErr(null) }}
+            onDelete={row => { if (renameOpen) return; setDelTarget({ kind: 'family', row }); setDelApiErr(null) }}
             onBatch={() => setSheet('family-batch')}
             onExport={() => generateFamiliasXLSX(families, selSeg ? `${selSeg.code}` : 'todas')}
             sortable
@@ -2150,6 +2195,7 @@ export function CodificacionPage() {
           />
 
           <CatalogColumn
+            blocked={renameOpen || editItemId != null}
             title="Clases" icon={Package} rows={itemClasses} selected={selClass}
             isLoading={loadClasses} enabled={!!selFam} placeholderText="Seleccioná una familia"
             width="w-[330px]"
@@ -2159,22 +2205,23 @@ export function CodificacionPage() {
             }}
             onNew={() => openNew('item-class')}
             onEdit={row => openEdit('item-class', itemClasses.find(t => t.id === row.id)!)}
-            onDelete={row => { setDelTarget({ kind: 'item-class', row }); setDelApiErr(null) }}
+            onDelete={row => { if (renameOpen) return; setDelTarget({ kind: 'item-class', row }); setDelApiErr(null) }}
             onBatch={() => setSheet('class-batch')}
             onCopy={() => setSheet('copy-to-family')}
-            onRename={() => setSheet('class-rename')}
+            onRename={() => { if (renameOpen || editItemId != null) return; if (selFam) setRenameTarget({ id: selFam.id, label: `${selFam.code} — ${selFam.name}` }); setSheet('class-rename') }}
             sortable
           />
 
           <ItemsColumn
             rows={items} selected={selItem} isLoading={loadItems} enabled={!!selClass}
             onSelect={setSelItem}
-            onNavigate={row => navigate({ to: `/app/catalog/items/${row.id}` })}
-            onEdit={row => setEditItemId(row.id)}
+            onNavigate={row => { if (!renameOpen) navigate({ to: `/app/catalog/items/${row.id}` }) }}
+            blocked={renameOpen || editItemId != null}
+            onEdit={row => { if (!renameOpen) { setEditLoadErr(null); setEditItemId(row.id) } }}
             editingId={loadingEditItem ? editItemId : null}
             onNew={() => setSheet('item')}
             onBatch={() => setSheet('batch')}
-            onRename={() => setSheet('rename')}
+            onRename={() => { if (renameOpen || editItemId != null) return; if (selClass) setRenameTarget({ id: selClass.id, label: `${selClass.code} — ${selClass.name}` }); setSheet('rename') }}
           />
 
           <ContextPanel
@@ -2182,7 +2229,8 @@ export function CodificacionPage() {
             selFam={selFam}
             selClass={selClass}
             selItem={selItem}
-            onNavigate={row => navigate({ to: `/app/catalog/items/${row.id}` })}
+            onNavigate={row => { if (!renameOpen) navigate({ to: `/app/catalog/items/${row.id}` }) }}
+            blocked={renameOpen || editItemId != null}
           />
         </div>
       </div>
@@ -2235,7 +2283,7 @@ export function CodificacionPage() {
 
       {editItemDetail && (
         <EditItemDialog
-          open={!!editItemId}
+          open={!!editItemId && !renameOpen}
           item={editItemDetail}
           onClose={() => setEditItemId(null)}
           onSaved={() => qc.invalidateQueries({ queryKey: ['items', selClass?.id] })}
@@ -2262,17 +2310,18 @@ export function CodificacionPage() {
       <FormDialog
         open={sheet === 'rename'}
         title="Renombrar ítems en lote"
-        onClose={() => setSheet(null)}
+        draggable
+        onClose={closeRename}
       >
-        {selClass && (
+        {renameTarget && (
           <RenameForm
-            typeId={selClass.id}
-            typeLabel={`${selClass.code} — ${selClass.name}`}
+            typeId={renameTarget.id}
+            typeLabel={renameTarget.label}
             onSave={() => {
-              qc.invalidateQueries({ queryKey: ['items', selClass.id] })
-              setSheet(null)
+              qc.invalidateQueries({ queryKey: ['items', renameTarget.id] })
+              closeRename()
             }}
-            onClose={() => setSheet(null)}
+            onClose={closeRename}
           />
         )}
       </FormDialog>
@@ -2280,17 +2329,18 @@ export function CodificacionPage() {
       <FormDialog
         open={sheet === 'class-rename'}
         title="Renombrar clases en lote"
-        onClose={() => setSheet(null)}
+        draggable
+        onClose={closeRename}
       >
-        {selFam && (
+        {renameTarget && (
           <RenameClassesForm
-            familyId={selFam.id}
-            familyLabel={`${selFam.code} — ${selFam.name}`}
+            familyId={renameTarget.id}
+            familyLabel={renameTarget.label}
             onSave={() => {
-              qc.invalidateQueries({ queryKey: ['item-classes', selFam.id] })
-              setSheet(null)
+              qc.invalidateQueries({ queryKey: ['item-classes', renameTarget.id] })
+              closeRename()
             }}
-            onClose={() => setSheet(null)}
+            onClose={closeRename}
           />
         )}
       </FormDialog>

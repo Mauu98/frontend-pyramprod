@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 
 export { inputBase, textareaBase, inputError } from './form-tokens'
@@ -126,8 +126,15 @@ export function ParentBadge({ label, value }: { label: string; value: string }) 
 
 /** Full-width error banner */
 export function ErrorBanner({ message }: { message?: string }) {
+  // Banners usually render at the bottom of a long scrolling form (below the fold): bring them
+  // into view on mount and whenever the message changes so a failed save is never silent.
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [message])
+
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-4 text-[14px] text-red-600">
+    <div ref={ref} role="alert" className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-4 text-[14px] text-red-600">
       <AlertCircle size={15} className="mt-0.5 shrink-0" strokeWidth={2} />
       <span className="leading-snug">
         {message ?? 'No se pudo guardar. Verificá los datos e intentá de nuevo.'}
