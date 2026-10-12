@@ -83,8 +83,11 @@ export function FormActions({
   label:   string
   onClose: () => void
 }) {
+  // FormDialog's scroll body has 2rem bottom padding, and sticky offsets are measured from it.
+  // -bottom-8/-mb-8 push the bar over that padding so it sits flush with the dialog edge with
+  // nothing scrolling underneath it; pb-8 restores the breathing room inside the bar itself.
   return (
-    <div className="sticky bottom-0 -mx-10 mt-8 flex items-center gap-5 border-t border-[#F2F4F7] bg-white px-10 pb-1 pt-5">
+    <div className="sticky -bottom-8 -mx-10 -mb-8 mt-8 flex items-center gap-5 border-t border-[#F2F4F7] bg-white px-10 pb-8 pt-5">
       <button
         type="button"
         onClick={onClose}
