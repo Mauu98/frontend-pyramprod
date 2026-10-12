@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { translateApiError } from '@/lib/api-error'
 import { useAuthStore } from '@/stores/auth.store'
 import type { LoginResponse } from '@/types/api.types'
 
@@ -35,8 +36,7 @@ export function LoginPage() {
       login(data)
       window.location.href = '/app/catalog'
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setError(msg ?? 'Error de conexión. Verificá que el servidor esté corriendo.')
+      setError(translateApiError(err))
     } finally {
       setLoading(false)
     }

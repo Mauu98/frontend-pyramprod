@@ -20,7 +20,9 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // A failed login is a 401 too; let the login form show it instead of reloading the page.
+    const isAuthEndpoint = error.config?.url?.includes('/auth/')
+    if (!isAuthEndpoint && (error.response?.status === 401 || error.response?.status === 403)) {
       localStorage.removeItem('pyramid_token')
       window.location.href = '/login'
     }
