@@ -143,12 +143,24 @@ function ContextPanel({
             {selClass.material && (
               <InfoRow label="Material" value={selClass.materialName ?? selClass.material} />
             )}
-            {selClass.weightMethod && <InfoRow label="Método de peso" value={selClass.weightMethod} />}
+            {/* Same unit the class form highlights next to the constant factor (Mm. ↔ Mm2.); Kg./Und-style
+                methods have no dimensional unit, so they show as-is and their coefficient carries no Kg./M3. */}
+            {selClass.weightMethod && (
+              <InfoRow
+                label="Dimensión Específica"
+                value={DIM_CROSS_MAP[selClass.weightMethod as DimMode] ?? selClass.weightMethod}
+              />
+            )}
             {selClass.specificWeight != null && (
-              <InfoRow label="Peso específico" value={selClass.specificWeight.toString()} />
+              <InfoRow
+                label="Peso específico"
+                value={DIM_CROSS_MAP[selClass.weightMethod as DimMode]
+                  ? `${selClass.specificWeight} Kg./M3.`
+                  : selClass.specificWeight.toString()}
+              />
             )}
             {selClass.nominalDimension != null && (
-              <InfoRow label="Dimensión nominal" value={selClass.nominalDimension.toString()} />
+              <InfoRow label="Factor Dimensional Constante" value={selClass.nominalDimension.toString()} />
             )}
             {selClass.description && (
               <div className="pb-4 pt-3">
