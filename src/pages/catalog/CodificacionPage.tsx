@@ -310,6 +310,13 @@ const SINGULAR: Record<string, string> = {
   Clases:    'clase',
 }
 
+// "Nuevo/Nueva" must agree in gender with the noun, so it can't be built from SINGULAR alone.
+const NEW_LABEL: Record<string, string> = {
+  Segmentos: 'Nuevo segmento',
+  Familias:  'Nueva familia',
+  Clases:    'Nueva clase',
+}
+
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
   onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, onRename, sortable, width = 'w-[272px]', blocked,
@@ -398,7 +405,7 @@ function CatalogColumn({
             <button
               onClick={onNew}
               disabled={blocked}
-              title={`Nuevo ${singular}`}
+              title={NEW_LABEL[title] ?? `Nuevo ${singular}`}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F] text-white shadow-sm transition hover:bg-[#1E4B21] active:scale-95 disabled:pointer-events-none disabled:opacity-40"
             >
               <Plus size={13} />
