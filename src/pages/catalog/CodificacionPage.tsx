@@ -18,7 +18,7 @@ import { NewItemForm } from '@/components/catalog/NewItemForm'
 import { EditItemDialog } from '@/components/catalog/EditItemDialog'
 import { MaterialReferenceGallery } from '@/components/catalog/MaterialReferenceGallery'
 import {
-  Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy,
+  Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy, CopyPlus,
   AlertTriangle, AlertCircle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
   FileSpreadsheet, ArrowDownUp, HelpCircle,
   type LucideIcon,
@@ -303,6 +303,26 @@ function generateFamiliasXLSX(families: Family[], segmentLabel: string) {
   XLSX.writeFile(wb, `familias_${segmentLabel}_${today}.xlsx`)
 }
 
+// ─── Clases XLSX export ────────────────────────────────────────────────────────
+function generateClasesXLSX(classes: ItemClass[], familyLabel: string) {
+  // Column names mirror the class detail panel so the sheet reads the same as the screen.
+  const headers = ['Código', 'Nombre', 'Abreviatura', 'Descripción', 'Dimensión Específica', 'Peso manual', 'Peso específico', 'Factor Dimensional Constante', 'Material']
+  const data = classes.map(c => [
+    c.code, c.name, c.abbreviation ?? '', c.description ?? '',
+    c.weightMethod ? (DIM_CROSS_MAP[c.weightMethod as DimMode] ?? c.weightMethod) : '',
+    c.manualWeight ? 'Sí' : 'No',
+    c.specificWeight ?? '', c.nominalDimension ?? '',
+    c.material ? (c.materialName ?? c.material) : '',
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+  ws['!cols'] = [{ wch: 10 }, { wch: 36 }, { wch: 14 }, { wch: 40 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 28 }, { wch: 36 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Clases')
+  const today = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `clases_${familyLabel}_${today}.xlsx`)
+}
+
 // ─── Catalog column ───────────────────────────────────────────────────────────
 const SINGULAR: Record<string, string> = {
   Segmentos: 'segmento',
@@ -319,12 +339,13 @@ const NEW_LABEL: Record<string, string> = {
 
 function CatalogColumn({
   title, icon: Icon, rows, selected, isLoading, enabled, placeholderText,
-  onSelect, onNew, onEdit, onDelete, onBatch, onCopy, onExport, onRename, sortable, width = 'w-[272px]', blocked,
+  onSelect, onNew, onEdit, onDelete, onDuplicate, onBatch, onCopy, onExport, onRename, sortable, width = 'w-[272px]', blocked,
 }: {
   title: string; icon: LucideIcon; rows: ColRow[]; selected: ColRow | null
   isLoading?: boolean; enabled: boolean; placeholderText: string
   onSelect: (r: ColRow) => void; onNew: () => void
   onEdit: (r: ColRow) => void; onDelete: (r: ColRow) => void
+  onDuplicate?: (r: ColRow) => void
   onBatch?: () => void; onCopy?: () => void; onExport?: () => void; onRename?: () => void
   sortable?: boolean; width?: string; blocked?: boolean
 }) {
@@ -470,6 +491,16 @@ function CatalogColumn({
                 {row.name}
               </span>
               <div className="flex shrink-0 self-center items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                {onDuplicate && (
+                  <button
+                    title={`Duplicar ${singular}`}
+                    onClick={e => { e.stopPropagation(); onDuplicate(row) }}
+                    disabled={blocked}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg disabled:pointer-events-none disabled:opacity-30 text-slate-400 transition hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]"
+                  >
+                    <CopyPlus size={13} />
+                  </button>
+                )}
                 <button
                   title={`Editar ${singular}`}
                   onClick={e => { e.stopPropagation(); onEdit(row) }}
@@ -1424,8 +1455,10 @@ function validateClassField(value: string, requiredMsg: string, t: TFunction): t
 const ABBR_HELP = 'Abreviatura corta que identifica esta clase dentro de los códigos de sus ítems. Validá que no se repita con otra clase de la misma familia.'
 
 // ─── Item class form ──────────────────────────────────────────────────────────
-function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClasses, onSave, onClose }: {
+function ItemClassForm({ item, template, familyId, familyLabel, segmentCode, existingClasses, onSave, onClose }: {
   item: ItemClass | null
+  // Source class for "Duplicar": prefills a NEW class (item stays null, so it saves via POST).
+  template?: ItemClass | null
   familyId: number
   familyLabel: string
   segmentCode: string
@@ -1442,19 +1475,20 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
   const preservedUnitConfig = unitSegment && !!item
   const fixUnitConfig = unitSegment && !preservedUnitConfig
   const hasStoredConfig = !!item && (item.manualWeight || item.weightMethod != null)
+  const src = item ?? template ?? null
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
-      name:             item?.name ?? '',
-      abbreviation:     item?.abbreviation ?? '',
-      description:      item?.description ?? '',
+      name:             src?.name ?? '',
+      abbreviation:     src?.abbreviation ?? '',
+      description:      src?.description ?? '',
       familyId,
-      weightMethod:     fixUnitConfig ? 'Kg./Und' : (item?.weightMethod ?? ''),
-      manualWeight:     fixUnitConfig ? false : (item?.manualWeight ?? false),
-      specificWeight:   fixUnitConfig ? '1' : (item?.specificWeight != null ? String(item.specificWeight) : ''),
-      nominalDimension: fixUnitConfig ? '1' : (item?.nominalDimension != null ? String(item.nominalDimension) : ''),
-      material:         item?.material ?? '',
-      materialName:     item?.materialName ?? '',
-      operatorName:     item?.operatorName ?? '',
+      weightMethod:     fixUnitConfig ? 'Kg./Und' : (src?.weightMethod ?? ''),
+      manualWeight:     fixUnitConfig ? false : (src?.manualWeight ?? false),
+      specificWeight:   fixUnitConfig ? '1' : (src?.specificWeight != null ? String(src.specificWeight) : ''),
+      nominalDimension: fixUnitConfig ? '1' : (src?.nominalDimension != null ? String(src.nominalDimension) : ''),
+      material:         src?.material ?? '',
+      materialName:     src?.materialName ?? '',
+      operatorName:     src?.operatorName ?? '',
     },
   })
 
@@ -1513,7 +1547,7 @@ function ItemClassForm({ item, familyId, familyLabel, segmentCode, existingClass
   }
 
   // Search state for raw material picker
-  const [matSearch, setMatSearch] = useState(item?.material ? `${item.material} — ${item.materialName ?? ''}` : '')
+  const [matSearch, setMatSearch] = useState(src?.material ? `${src.material} — ${src.materialName ?? ''}` : '')
   const [matResults, setMatResults] = useState<{ fullCode: string; fullName: string }[]>([])
   const [showMatDrop, setShowMatDrop] = useState(false)
   const matDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -2072,6 +2106,7 @@ export function CodificacionPage() {
   const [editSeg,   setEditSeg]   = useState<Segment | null>(null)
   const [editFam,   setEditFam]   = useState<Family | null>(null)
   const [editClass, setEditClass] = useState<ItemClass | null>(null)
+  const [dupClass,  setDupClass]  = useState<ItemClass | null>(null)
   // Bulk-rename dialogs are non-modal: freeze their target at open time so selecting another row behind them doesn't retarget.
   const [renameTarget, setRenameTarget] = useState<{ id: number; label: string } | null>(null)
   const closeRename = () => { setRenameTarget(null); setSheetRaw(null) }
@@ -2162,14 +2197,14 @@ export function CodificacionPage() {
     if (renameOpen) return
     if (kind === 'segment')    setEditSeg(null)
     if (kind === 'family')     setEditFam(null)
-    if (kind === 'item-class') setEditClass(null)
+    if (kind === 'item-class') { setEditClass(null); setDupClass(null) }
     setSheet(kind)
   }
   const openEdit = (kind: SheetKind, row: Segment | Family | ItemClass) => {
     if (renameOpen) return
     if (kind === 'segment')    setEditSeg(row as Segment)
     if (kind === 'family')     setEditFam(row as Family)
-    if (kind === 'item-class') setEditClass(row as ItemClass)
+    if (kind === 'item-class') { setEditClass(row as ItemClass); setDupClass(null) }
     setSheet(kind)
   }
 
@@ -2253,7 +2288,7 @@ export function CodificacionPage() {
             blocked={renameOpen || editItemId != null}
             title="Clases" icon={Package} rows={itemClasses} selected={selClass}
             isLoading={loadClasses} enabled={!!selFam} placeholderText="Seleccioná una familia"
-            width="w-[330px]"
+            width="w-[380px] min-w-[380px]"
             onSelect={row => {
               const cls = itemClasses.find(t => t.id === row.id)!
               setSelClass(cls); setSelItem(null)
@@ -2261,7 +2296,12 @@ export function CodificacionPage() {
             onNew={() => openNew('item-class')}
             onEdit={row => openEdit('item-class', itemClasses.find(t => t.id === row.id)!)}
             onDelete={row => { if (renameOpen) return; setDelTarget({ kind: 'item-class', row }); setDelApiErr(null) }}
+            onDuplicate={row => {
+              if (renameOpen) return
+              setEditClass(null); setDupClass(itemClasses.find(t => t.id === row.id)!); setSheet('item-class')
+            }}
             onBatch={() => setSheet('class-batch')}
+            onExport={() => generateClasesXLSX(itemClasses, selFam ? `${selFam.code}` : 'todas')}
             onCopy={() => setSheet('copy-to-family')}
             onRename={() => { if (renameOpen || editItemId != null) return; if (selFam) setRenameTarget({ id: selFam.id, label: `${selFam.code} — ${selFam.name}` }); setSheet('class-rename') }}
             sortable
@@ -2311,14 +2351,15 @@ export function CodificacionPage() {
 
       <FormDialog
         open={sheet === 'item-class'}
-        title={editClass ? 'Modificar Clase' : 'Nueva Clase'}
+        title={editClass ? 'Modificar Clase' : dupClass ? `Nueva Clase (copia de ${dupClass.code})` : 'Nueva Clase'}
         subtitle={selSeg ? `Segmento: ${selSeg.code} — ${selSeg.name}${selFam ? `\nFamilia: ${selFam.name}` : ''}` : undefined}
         width="w-[640px]"
         onClose={() => setSheet(null)}
       >
         {selFam && selSeg && (
           <ItemClassForm
-            item={editClass} familyId={selFam.id}
+            key={editClass?.id ?? (dupClass ? `dup-${dupClass.id}` : 'new')}
+            item={editClass} template={dupClass} familyId={selFam.id}
             familyLabel={`${selFam.code} — ${selFam.name}`}
             segmentCode={selSeg.code}
             existingClasses={itemClasses}
