@@ -88,8 +88,8 @@ export function EditItemDialog({ open, item, onClose, onSaved }: {
       // does a full REPLACE from ItemRequest (not a merge) — omitting them doesn't just skip an
       // update, it silently overwrites real data with null on every save (material/
       // materialDevelopment/segmentCode/description) or fails backend validation outright
-      // (unitPurchase is @NotBlank; unitConsumption must match the item's weight method, e.g.
-      // "Mm." for MM_LINEAR). Pass all of them through unchanged.
+      // (unitPurchase is @NotBlank and both units are free choices validated against Measures).
+      // Pass all of them through unchanged.
       segmentCode:         item.segmentCode,
       description:         item.description,
       material:            item.material,

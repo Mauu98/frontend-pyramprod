@@ -179,7 +179,8 @@ export function NewItemForm({ open, itemType, onSave, onClose }: {
       functionName:        v.func || null,
       material:            requiresMaterial ? (matCode || null) : null,
       materialDevelopment: mapped.materialDevelopment,
-      unitConsumption:     unit ?? 'Und',
+      // null lets the backend apply its class-derived default; weight-method labels are not Measures.
+      unitConsumption:     null,
       unitPurchase:        'Und',
       dim2:                mapped.dim2,
       dim3:                mapped.dim3,
