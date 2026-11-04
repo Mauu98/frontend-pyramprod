@@ -46,15 +46,6 @@ export const catalogService = {
   getMeasures: () =>
     apiClient.get<Measure[]>('/measures').then(r => r.data),
 
-  createMeasure: (data: { code: string; name: string; symbol?: string }) =>
-    apiClient.post<Measure>('/measures', data).then(r => r.data),
-
-  updateMeasure: (id: number, data: { code?: string; name?: string; symbol?: string }) =>
-    apiClient.patch<Measure>(`/measures/${id}`, data).then(r => r.data),
-
-  deleteMeasure: (id: number) =>
-    apiClient.delete(`/measures/${id}`),
-
   batchImportFamilies: (segmentId: number, text: string) =>
     apiClient.post<Family[]>(`/families/segments/${segmentId}/batch-text`, { text }).then(r => r.data),
 
