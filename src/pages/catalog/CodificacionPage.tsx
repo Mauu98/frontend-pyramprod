@@ -95,13 +95,12 @@ function ContextPanel({
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#2C6B2F]/15">
                 <Tag size={15} className="text-[#2C6B2F]" />
               </div>
-              <div className="min-w-0">
-                <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#2C6B2F]">
-                  {selItem.fullCode}
-                </p>
-                <p className="line-clamp-2 text-[16px] font-bold leading-snug text-[#111827]">{selItem.fullName}</p>
-              </div>
+              <p className="min-w-0 break-all font-mono text-[11px] font-bold uppercase tracking-wider text-[#2C6B2F]">
+                {selItem.fullCode}
+              </p>
             </div>
+            {/* Full name below the code row so long names use the whole card width instead of being clipped. */}
+            <p className="mt-3 break-words text-[16px] font-bold leading-snug text-[#111827]">{selItem.fullName}</p>
           </div>
           <div className="p-5">
             <div className="grid grid-cols-2 gap-3">
@@ -799,7 +798,7 @@ function BatchImportForm({ typeId, typeLabel, onSave, onClose }: {
           value={text}
           onChange={e => setText(e.target.value)}
           rows={10}
-          placeholder={'Planchuela;Planch\nTrefilado;Tref\nCañería;Cañ'}
+          placeholder={'Hoja 1220x2440;H1224\nHoja 1500x3000;H1530\nRecorte 500x500;R5050'}
           className={cn(textareaBase, 'font-mono text-[13px]')}
         />
       </FormSection>

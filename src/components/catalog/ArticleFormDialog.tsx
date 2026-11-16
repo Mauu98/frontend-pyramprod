@@ -43,6 +43,17 @@ const num = (s: string) => {
 
 const str = (n: number | null | undefined) => (n != null ? String(n) : '')
 
+/**
+ * The class panel shows the legacy "Dimensión Específica" (the dimension FIXED in the class), which is
+ * the mirror of the stored weightMethod (the article's unit): Mm. <-> Mm2., Mm3. unchanged.
+ */
+const CLASS_DIM: Partial<Record<WeightMethod, string>> = { 'Mm.': 'Mm2.', 'Mm2.': 'Mm.', 'Mm3.': 'Mm3.' }
+
+function classDimSuffix(cls: ItemClass): string {
+  if (cls.manualWeight || !cls.weightMethod) return ''
+  return ` · Dimensión específica: ${CLASS_DIM[cls.weightMethod] ?? cls.weightMethod}`
+}
+
 /** Number of dimension boxes that feed dim2..dim4 for a weight method. */
 function boxCount(method: WeightMethod | null): number {
   if (method === 'Mm3.') return 2
@@ -121,7 +132,7 @@ export function ArticleFormDialog(props: ArticleFormDialogProps) {
     <FormDialog
       open={open}
       title={item ? 'Modificar Artículo' : props.template ? `Nuevo Artículo (copia de ${props.template.fullCode})` : 'Nuevo Artículo'}
-      subtitle={`Segmento: ${props.segmentLabel}\nFamilia: ${props.familyLabel}\nClase: ${props.itemClass.code} — ${props.itemClass.name}`}
+      subtitle={`Segmento: ${props.segmentLabel}\nFamilia: ${props.familyLabel}\nClase: ${props.itemClass.code} — ${props.itemClass.name}${classDimSuffix(props.itemClass)}`}
       width="w-[760px]"
       onClose={onClose}
     >
@@ -303,18 +314,24 @@ function ArticleFormBody({ itemClass, item, template, familyName, onSaved, onClo
     : null
   const legacyAreaWithoutWidth = isEdit && method === 'Mm2.' && item?.dim3 === 1 && dims[1] === '1'
   const showFixed = !!fixedLabel && !manualWeight
+  // Classes created before the weight-config validation (or via text import) may lack the inputs the
+  // weight formula needs; the article form can't fix that, so it points the user to the class.
+  // Geometric methods treat 0 as missing (calcWeight uses `sw && nd`); Kg./Und and Und/Kg. only reject null.
+  const geometric = method === 'Mm.' || method === 'Mm2.' || method === 'Mm3.'
+  const lacks = (v: number | null | undefined) => (geometric ? !v : v == null)
+  const missingClassInputs = [
+    lacks(itemClass.specificWeight) && 'el peso específico',
+    method !== 'Mm3.' && lacks(itemClass.nominalDimension) && 'la dimensión nominal',
+  ].filter(Boolean).join(' y ')
+  const missingClassWeight = manualWeight ? null
+    : !method ? 'no tiene definido el cálculo de peso'
+    : missingClassInputs ? `no tiene cargado ${missingClassInputs}`
+    : null
 
   return (
     <div className="flex flex-col gap-6">
-      {method && !manualWeight && (
-        <div className="flex items-center justify-end gap-3">
-          <span className="text-[12px] text-[#667085]">Dimensión Específica de la clase</span>
-          <span className="rounded-full bg-[#2C6B2F]/10 px-3 py-1.5 text-[14px] font-bold text-[#2C6B2F]">{method}</span>
-        </div>
-      )}
-
       <FormSection title="Identificación" first>
-        <div className="grid grid-cols-[150px_1fr] gap-4">
+        <div className="grid grid-cols-[140px_1fr_200px] gap-4">
           <FormField label="Código">
             <input readOnly value={item?.fullCode ?? ''} placeholder="Automático" title="Se asigna al crear"
               className={cn(inputBase, 'bg-[#f7f8fa] font-mono text-[14px] font-bold text-[#475467] placeholder:font-sans placeholder:font-normal')} />
@@ -322,13 +339,19 @@ function ArticleFormBody({ itemClass, item, template, familyName, onSaved, onClo
           <FormField label="Nombre" required helper="Máx. 65 caracteres">
             <input value={name} maxLength={65} onChange={e => setName(e.target.value)} className={inputBase} />
           </FormField>
+          <FormField label="Abreviatura" required={!isEdit} helper="Máx. 25 caracteres">
+            <input value={abbr} maxLength={25} onChange={e => setAbbr(e.target.value)} className={inputBase} />
+          </FormField>
         </div>
-        <FormField label="Abreviatura" required={!isEdit} helper="Máx. 25 caracteres" className="w-[280px]">
-          <input value={abbr} maxLength={25} onChange={e => setAbbr(e.target.value)} className={inputBase} />
-        </FormField>
       </FormSection>
 
       <FormSection title="Dimensiones específicas">
+        {missingClassWeight && (
+          <p role="alert" className="rounded-lg border border-[#FEC84B] bg-[#FFFAEB] px-3 py-2 text-[13px] text-[#93370D]">
+            La clase {itemClass.code} — {itemClass.name} {missingClassWeight}, así que el peso del artículo no se puede calcular.
+            Completalo desde Clases (Modificar clase → Peso Calculado) y volvé a crear el artículo.
+          </p>
+        )}
         {manualWeight ? (
           <FormField label="Peso (Kg.)" helper="Esta clase carga el peso a mano — no usa ninguna fórmula">
             <input type="number" step="any" min="0" value={manualWeightText} placeholder="0.000000"
