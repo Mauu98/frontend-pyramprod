@@ -18,6 +18,14 @@ export interface Measure {
   symbol: string | null
 }
 
+/** Company unit equivalency: 1 fromUnit = factor toUnit. */
+export interface MeasureEquivalency {
+  id: number
+  fromUnit: string
+  toUnit: string
+  factor: number
+}
+
 export const catalogService = {
   getItems: (filter: ItemsFilter = {}) =>
     apiClient.get<{ content: ItemSummary[]; totalElements: number; totalPages: number; number: number }>('/items', { params: { size: 20, ...filter } }).then(r => r.data),
@@ -45,6 +53,9 @@ export const catalogService = {
 
   getMeasures: () =>
     apiClient.get<Measure[]>('/measures').then(r => r.data),
+
+  getEquivalencies: () =>
+    apiClient.get<MeasureEquivalency[]>('/measures/equivalencies').then(r => r.data),
 
   batchImportFamilies: (segmentId: number, text: string) =>
     apiClient.post<Family[]>(`/families/segments/${segmentId}/batch-text`, { text }).then(r => r.data),

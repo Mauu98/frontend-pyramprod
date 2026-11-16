@@ -16,6 +16,7 @@ import {
 import type { Segment, Family, ItemClass, ItemSummary, ItemDetail } from '@/types/api.types'
 import { NewItemForm } from '@/components/catalog/NewItemForm'
 import { EditItemDialog } from '@/components/catalog/EditItemDialog'
+import { ArticleFormDialog } from '@/components/catalog/ArticleFormDialog'
 import { MaterialReferenceGallery } from '@/components/catalog/MaterialReferenceGallery'
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy, CopyPlus,
@@ -2368,7 +2369,19 @@ export function CodificacionPage() {
         )}
       </FormDialog>
 
-      {selClass && (
+      {/* Segment 4 (Piezas) keeps the legacy item forms; every other segment uses the Artículo form. */}
+      {selClass && selClass.segmentCode !== '4' && selSeg && selFam && (
+        <ArticleFormDialog
+          open={sheet === 'item'}
+          itemClass={selClass}
+          segmentLabel={`${selSeg.code} — ${selSeg.name}`}
+          familyLabel={`${selFam.code} — ${selFam.name}`}
+          familyName={selFam.name}
+          onSaved={() => setSheet(null)}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {selClass && selClass.segmentCode === '4' && (
         <NewItemForm
           open={sheet === 'item'}
           itemType={selClass}
@@ -2377,7 +2390,19 @@ export function CodificacionPage() {
         />
       )}
 
-      {editItemDetail && (
+      {editItemDetail && selClass && selSeg && selFam && editItemDetail.typeId === selClass.id && editItemDetail.classSegmentCode !== '4' && (
+        <ArticleFormDialog
+          open={!!editItemId && !renameOpen}
+          itemClass={selClass}
+          item={editItemDetail}
+          segmentLabel={`${selSeg.code} — ${selSeg.name}`}
+          familyLabel={`${selFam.code} — ${selFam.name}`}
+          familyName={selFam.name}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['items', selClass.id] })}
+          onClose={() => setEditItemId(null)}
+        />
+      )}
+      {editItemDetail && !(selClass && selSeg && selFam && editItemDetail.typeId === selClass.id && editItemDetail.classSegmentCode !== '4') && (
         <EditItemDialog
           open={!!editItemId && !renameOpen}
           item={editItemDetail}

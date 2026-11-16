@@ -166,6 +166,8 @@
   "EMPTY_SOURCE_BOM": "El producto de origen no tiene líneas de lista de materiales para copiar.",
   "FAMILY_HAS_ITEM_CLASSES": "La familia tiene clases. Eliminá las clases primero.",
   "UNKNOWN_MEASURE": "La unidad \"{{unit}}\" no existe en Medidas.",
+  "MISSING_UNIT_FACTOR": "Falta la equivalencia entre la unidad de provisión y la de consumo.",
+  "FUNCTION_NAME_REQUIRED": "El nombre del artículo es obligatorio.",
   "MISSING_PARAMETER": "Falta un dato obligatorio en la solicitud ({{param}}).",
   "INVALID_WEIGHT": "El peso debe ser mayor que cero.",
   "ITEM_CLASS_HAS_ITEMS": "La clase tiene ítems. Eliminá los ítems primero.",

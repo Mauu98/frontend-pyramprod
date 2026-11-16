@@ -1146,7 +1146,7 @@ export function ItemFichaPage({ itemId }: { itemId: number }) {
               <InfoRow label="Unid. Consumo" value={item.unitConsumption} />
               <InfoRow label="Unid. Compra" value={item.unitPurchase} />
               <InfoRow label="Factor Convers." value={item.unitConversionFactor !== 1 ? fmt(item.unitConversionFactor, 4) : null} />
-              <InfoRow label="Unid. Emisión" value={item.unitIssueItem} />
+              <InfoRow label="Unid. Emisión" value={item.unitIssueItem != null ? String(item.unitIssueItem) : null} />
               <InfoRow label="Fracc. Piezas" value={item.piecesFraction != null ? fmt(item.piecesFraction, 3) : null} />
             </SectionCard>
 

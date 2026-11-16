@@ -77,6 +77,10 @@ export interface ItemDetail {
   unitPurchase: string | null
   dim2: number | null
   dim3: number | null
+  /** Fourth dimension — only used by Mm3. classes (Largo, Ancho, Alto). */
+  dim4?: number | null
+  /** Whether the weight is appended to the generated full name. */
+  showWeightInName?: boolean | null
   // stock
   stockAvailable: number
   stockReserved: number
@@ -109,7 +113,7 @@ export interface ItemDetail {
   productionMemo: string | null
   observations: string | null
   unitConversionFactor: number
-  unitIssueItem: string | null
+  unitIssueItem: number | null
   piecesFraction: number | null
   invoiceSaleMargin: number | null
   invoiceStockMargin: number | null
