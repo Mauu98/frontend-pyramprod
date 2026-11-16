@@ -21,7 +21,7 @@ import { MaterialReferenceGallery } from '@/components/catalog/MaterialReference
 import {
   Plus, Search, Pencil, Trash2, ChevronRight, Layers, Copy, CopyPlus,
   AlertTriangle, AlertCircle, User, LayoutGrid, FolderOpen, Package, Tag, ListPlus, Replace,
-  FileSpreadsheet, ArrowDownUp, HelpCircle,
+  FileSpreadsheet, ArrowDownUp, HelpCircle, Hash, Type, Ruler, Check,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -324,6 +324,19 @@ function generateClasesXLSX(classes: ItemClass[], familyLabel: string) {
   XLSX.writeFile(wb, `clases_${familyLabel}_${today}.xlsx`)
 }
 
+// ─── Artículos XLSX export ─────────────────────────────────────────────────────
+function generateArticulosXLSX(items: ItemSummary[], classLabel: string) {
+  const headers = ['Código', 'Nombre', 'Unidad', 'Stock disponible', 'Stock mínimo']
+  const data = items.map(i => [i.fullCode, i.fullName, i.unitOfMeasure ?? '', i.stockAvailable ?? 0, i.stockMin ?? 0])
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+  ws['!cols'] = [{ wch: 16 }, { wch: 60 }, { wch: 10 }, { wch: 16 }, { wch: 14 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Artículos')
+  const today = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `articulos_${classLabel}_${today}.xlsx`)
+}
+
 // ─── Catalog column ───────────────────────────────────────────────────────────
 const SINGULAR: Record<string, string> = {
   Segmentos: 'segmento',
@@ -528,14 +541,38 @@ function CatalogColumn({
 }
 
 // ─── Items column ─────────────────────────────────────────────────────────────
-function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate, onEdit, editingId, onNew, onBatch, onRename, blocked }: {
+function ItemsColumn({
+  rows, selected, isLoading, enabled, onSelect, onNavigate, onEdit, editingId, duplicatingId,
+  onNew, onBatch, onRename, onExport, onMeasures, onDuplicate, onDelete, blocked,
+}: {
   rows: ItemSummary[]; selected: ItemSummary | null; isLoading?: boolean; enabled: boolean
   onSelect: (r: ItemSummary) => void; onNavigate: (r: ItemSummary) => void; onEdit: (r: ItemSummary) => void
-  editingId?: number | null
-  onNew: () => void; onBatch: () => void; onRename: () => void; blocked?: boolean
+  editingId?: number | null; duplicatingId?: number | null
+  onNew: () => void; onBatch: () => void; onRename: () => void
+  onExport: () => void; onMeasures: () => void
+  onDuplicate: (r: ItemSummary) => void; onDelete: (r: ItemSummary) => void
+  blocked?: boolean
 }) {
   const [q, setQ] = useState('')
   const filtered = rows.filter(r => !q || r.fullName.toLowerCase().includes(q) || r.fullCode.toLowerCase().includes(q))
+  // Brief check-mark feedback on the copy buttons ("<rowId>:code" / "<rowId>:name").
+  const [copied, setCopied] = useState<string | null>(null)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current) }, [])
+  const copy = (key: string, text: string) => {
+    // navigator.clipboard is undefined on insecure origins; a denied write just shows no check mark.
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(key)
+      if (copiedTimer.current) clearTimeout(copiedTimer.current)
+      copiedTimer.current = setTimeout(() => setCopied(null), 1500)
+    }).catch(() => {})
+  }
+  const headerBtn = "flex h-7 w-7 items-center justify-center rounded-lg border border-[#2C6B2F]/25 bg-[#2C6B2F]/8 text-[#2C6B2F] transition hover:bg-[#2C6B2F]/15 active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+  const rowBtn = (danger = false) => cn(
+    blocked && 'pointer-events-none opacity-40! group-hover:opacity-40!',
+    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100',
+    danger ? 'hover:bg-red-50 hover:text-red-500' : 'hover:bg-[#2C6B2F]/8 hover:text-[#2C6B2F]',
+  )
 
   return (
     <div className={cn(
@@ -550,7 +587,25 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
           <p className="text-[13px] font-semibold text-[#374151]">Items</p>
           <p className="text-[11px] text-slate-400">{rows.length} registros</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={onExport}
+            disabled={!enabled || rows.length === 0}
+            title="Exportar artículos a XLSX"
+            aria-label="Exportar artículos a XLSX"
+            className={headerBtn}
+          >
+            <FileSpreadsheet size={13} />
+          </button>
+          <button
+            onClick={onMeasures}
+            disabled={!enabled || blocked}
+            title="Unidades de medida"
+            aria-label="Unidades de medida"
+            className={cn(headerBtn, blocked && 'disabled:opacity-40!')}
+          >
+            <Ruler size={13} />
+          </button>
           <button
             onClick={onBatch}
             disabled={!enabled || blocked}
@@ -639,7 +694,34 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
                   <span className="font-mono font-semibold text-slate-500">{(row.stockAvailable ?? 0).toFixed(2)}</span>
                   {row.unitOfMeasure && <> {row.unitOfMeasure}</>}
                 </span>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    title="Duplicar artículo"
+                    aria-label="Duplicar artículo"
+                    disabled={duplicatingId === row.id || blocked}
+                    onClick={e => { e.stopPropagation(); onDuplicate(row) }}
+                    className={cn(rowBtn(), 'disabled:opacity-100')}
+                  >
+                    {duplicatingId === row.id
+                      ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
+                      : <CopyPlus size={13} />}
+                  </button>
+                  <button
+                    title="Copiar código"
+                    aria-label="Copiar código"
+                    onClick={e => { e.stopPropagation(); copy(`${row.id}:code`, row.fullCode) }}
+                    className={rowBtn()}
+                  >
+                    {copied === `${row.id}:code` ? <Check size={13} className="text-[#2C6B2F]" /> : <Hash size={13} />}
+                  </button>
+                  <button
+                    title="Copiar nombre"
+                    aria-label="Copiar nombre"
+                    onClick={e => { e.stopPropagation(); copy(`${row.id}:name`, row.fullName) }}
+                    className={rowBtn()}
+                  >
+                    {copied === `${row.id}:name` ? <Check size={13} className="text-[#2C6B2F]" /> : <Type size={13} />}
+                  </button>
                   <button
                     title="Editar ítem"
                     disabled={editingId === row.id || blocked}
@@ -649,6 +731,15 @@ function ItemsColumn({ rows, selected, isLoading, enabled, onSelect, onNavigate,
                     {editingId === row.id
                       ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#2C6B2F] border-t-transparent" />
                       : <Pencil size={13} />}
+                  </button>
+                  <button
+                    title="Eliminar artículo"
+                    aria-label="Eliminar artículo"
+                    disabled={blocked}
+                    onClick={e => { e.stopPropagation(); onDelete(row) }}
+                    className={rowBtn(true)}
+                  >
+                    <Trash2 size={13} />
                   </button>
                   <button
                     title="Ver ficha del ítem"
@@ -2112,8 +2203,10 @@ export function CodificacionPage() {
   const [renameTarget, setRenameTarget] = useState<{ id: number; label: string } | null>(null)
   const closeRename = () => { setRenameTarget(null); setSheetRaw(null) }
   const [editItemId, setEditItemId] = useState<number | null>(null)
+  // "Duplicar artículo": source article whose detail is loaded to prefill a new Artículo form.
+  const [dupItemId, setDupItemId] = useState<number | null>(null)
 
-  const [delTarget, setDelTarget] = useState<{ kind: 'segment' | 'family' | 'item-class'; row: ColRow } | null>(null)
+  const [delTarget, setDelTarget] = useState<{ kind: 'segment' | 'family' | 'item-class' | 'item'; row: ColRow } | null>(null)
   const [delApiErr, setDelApiErr] = useState<string | null>(null)
   const [editLoadErr, setEditLoadErr] = useState<string | null>(null)
 
@@ -2149,6 +2242,34 @@ export function CodificacionPage() {
     enabled:  !!editItemId,
   })
 
+  const { data: dupItemDetail, isFetching: loadingDupItem } = useQuery({
+    // Own key and no cache: the form seeds its state once, so it must start from fresh data.
+    queryKey: ['item-detail', 'duplicate', dupItemId],
+    gcTime:   0,
+    queryFn:  () => apiClient.get<ItemDetail>(`/items/${dupItemId}`).then(r => r.data).catch(err => {
+      setDupItemId(null)
+      setEditLoadErr(translateApiError(err, 'fallback.loadItem'))
+      throw err
+    }),
+    enabled:  !!dupItemId,
+  })
+  // Piezas (segment 4) keep the legacy forms, which can't be prefilled: the server clones the
+  // article right away and its edit dialog opens on the copy.
+  const cloneItemMut = useMutation({
+    mutationFn: (id: number) => apiClient.post<ItemDetail>(`/items/${id}/clone`).then(r => r.data),
+    onSuccess: clone => {
+      qc.invalidateQueries({ queryKey: ['items', selClass?.id] })
+      setEditItemId(clone.id)
+    },
+    onError: err => setEditLoadErr(translateApiError(err)),
+  })
+  const duplicateItem = (row: ItemSummary) => {
+    if (renameOpen || editItemId != null || dupItemId != null || cloneItemMut.isPending) return
+    setEditLoadErr(null)
+    if (selClass?.segmentCode === '4') cloneItemMut.mutate(row.id)
+    else setDupItemId(row.id)
+  }
+
   const deleteSegMut = useMutation({
     mutationFn: (id: number) => apiClient.delete(`/segments/${id}`),
     onSuccess: () => {
@@ -2177,13 +2298,24 @@ export function CodificacionPage() {
     onError: err => setDelApiErr(translateApiError(err)),
   })
 
-  const delPending = deleteSegMut.isPending || deleteFamMut.isPending || deleteClassMut.isPending
+  const deleteItemMut = useMutation({
+    mutationFn: (id: number) => apiClient.delete(`/items/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['items', selClass?.id] })
+      if (selItem?.id === delTarget?.row.id) setSelItem(null)
+      setDelTarget(null); setDelApiErr(null)
+    },
+    onError: err => setDelApiErr(translateApiError(err)),
+  })
+
+  const delPending = deleteSegMut.isPending || deleteFamMut.isPending || deleteClassMut.isPending || deleteItemMut.isPending
 
   const handleDeleteConfirm = () => {
     if (!delTarget) return
     setDelApiErr(null)
     if (delTarget.kind === 'segment')    deleteSegMut.mutate(delTarget.row.id)
     else if (delTarget.kind === 'family') deleteFamMut.mutate(delTarget.row.id)
+    else if (delTarget.kind === 'item') deleteItemMut.mutate(delTarget.row.id)
     else deleteClassMut.mutate(delTarget.row.id)
   }
 
@@ -2213,6 +2345,7 @@ export function CodificacionPage() {
     segment:    'Eliminar segmento',
     family:     'Eliminar familia',
     'item-class': 'Eliminar clase',
+    item:       'Eliminar artículo',
   }
 
   return (
@@ -2312,9 +2445,14 @@ export function CodificacionPage() {
             rows={items} selected={selItem} isLoading={loadItems} enabled={!!selClass}
             onSelect={setSelItem}
             onNavigate={row => { if (!renameOpen) navigate({ to: `/app/catalog/items/${row.id}` }) }}
-            blocked={renameOpen || editItemId != null}
-            onEdit={row => { if (!renameOpen) { setEditLoadErr(null); setEditItemId(row.id) } }}
+            blocked={renameOpen || editItemId != null || dupItemId != null || cloneItemMut.isPending}
+            onEdit={row => { if (!renameOpen && !cloneItemMut.isPending) { setEditLoadErr(null); setEditItemId(row.id) } }}
             editingId={loadingEditItem ? editItemId : null}
+            duplicatingId={loadingDupItem ? dupItemId : cloneItemMut.isPending ? cloneItemMut.variables : null}
+            onDuplicate={duplicateItem}
+            onDelete={row => { if (renameOpen) return; setDelTarget({ kind: 'item', row: { id: row.id, code: row.fullCode, name: row.fullName } }); setDelApiErr(null) }}
+            onExport={() => generateArticulosXLSX(items, selClass ? `${selClass.code}` : 'todos')}
+            onMeasures={() => { if (!renameOpen) navigate({ to: '/app/measures' }) }}
             onNew={() => setSheet('item')}
             onBatch={() => setSheet('batch')}
             onRename={() => { if (renameOpen || editItemId != null) return; if (selClass) setRenameTarget({ id: selClass.id, label: `${selClass.code} — ${selClass.name}` }); setSheet('rename') }}
@@ -2390,6 +2528,19 @@ export function CodificacionPage() {
         />
       )}
 
+      {dupItemDetail && selClass && selSeg && selFam && dupItemDetail.typeId === selClass.id && (
+        <ArticleFormDialog
+          key={`dup-${dupItemDetail.id}`}
+          open={!!dupItemId && !renameOpen}
+          itemClass={selClass}
+          template={dupItemDetail}
+          segmentLabel={`${selSeg.code} — ${selSeg.name}`}
+          familyLabel={`${selFam.code} — ${selFam.name}`}
+          familyName={selFam.name}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['items', selClass.id] })}
+          onClose={() => setDupItemId(null)}
+        />
+      )}
       {editItemDetail && selClass && selSeg && selFam && editItemDetail.typeId === selClass.id && editItemDetail.classSegmentCode !== '4' && (
         <ArticleFormDialog
           open={!!editItemId && !renameOpen}

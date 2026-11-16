@@ -19,7 +19,8 @@ const DEFAULT_UNIT = 'Und'
 const BOX_LABELS: Record<WeightMethod, string[]> = {
   'Mm.': ['Largo'],
   'Mm2.': ['Largo', 'Ancho'],
-  'Mm3.': ['Largo', 'Ancho', 'Alto'],
+  // Legacy codificacion_c_02 habilidimm(): Mm3. enables 2 boxes (dim_e2, dim_e3), both labelled "Dim. Especif."
+  'Mm3.': ['Dim. Específica 1', 'Dim. Específica 2'],
   'Kg./Und': ['[Kg./Item]'],
   'Und/Kg.': ['[Items/Kg.]'],
 }
@@ -27,7 +28,7 @@ const BOX_LABELS: Record<WeightMethod, string[]> = {
 const DIM_HELP: Record<WeightMethod, string> = {
   'Mm.': 'La clase consume por LARGO: la sección es fija en la clase, acá se carga 1 de 3 dimensiones.',
   'Mm2.': 'La clase consume por SUPERFICIE: el espesor es fijo en la clase, acá se cargan 2 de 3 dimensiones.',
-  'Mm3.': 'La clase consume por PORCIÓN VOLUMÉTRICA: no hay dimensión fija, acá se cargan 3 de 3 dimensiones.',
+  'Mm3.': 'La clase consume por PORCIÓN VOLUMÉTRICA: se cargan 2 dimensiones específicas y su producto se expresa en Mm3.',
   'Kg./Und': 'La clase se define por peso por ítem: se carga el peso de 1 ítem en Kg.',
   'Und/Kg.': 'La clase se define por ítems por Kg.: se carga cuántos ítems entran en 1 Kg.',
 }
@@ -44,7 +45,7 @@ const str = (n: number | null | undefined) => (n != null ? String(n) : '')
 
 /** Number of dimension boxes that feed dim2..dim4 for a weight method. */
 function boxCount(method: WeightMethod | null): number {
-  if (method === 'Mm3.') return 3
+  if (method === 'Mm3.') return 2
   if (method === 'Mm2.') return 2
   return method ? 1 : 0
 }
@@ -88,7 +89,7 @@ function weightFormula(cls: ItemClass, method: WeightMethod): string {
   switch (method) {
     case 'Mm.': return `Sección × Largo${sw}`
     case 'Mm2.': return `Espesor × Largo × Ancho${sw}`
-    case 'Mm3.': return `Volumen${sw}`
+    case 'Mm3.': return `Dim. 1 × Dim. 2${sw}`
     case 'Kg./Und': return 'Peso cargado por ítem'
     case 'Und/Kg.': return `Peso específico × Dimensión nominal ÷ Ítems por Kg.`
   }
@@ -100,9 +101,11 @@ export interface ArticleFormDialogProps {
   itemClass: ItemClass
   /** Existing article when editing; omit to create. */
   item?: ItemDetail
+  /** Source article for "Duplicar": prefills a NEW article (item stays undefined, so it saves via POST). */
+  template?: ItemDetail
   segmentLabel: string
   familyLabel: string
-  /** Family abbreviation, used only for the final-description preview. */
+  /** Family name, used only for the final-description preview. */
   familyName?: string | null
   onSaved: () => void
   onClose: () => void
@@ -117,7 +120,7 @@ export function ArticleFormDialog(props: ArticleFormDialogProps) {
   return (
     <FormDialog
       open={open}
-      title={item ? 'Modificar Artículo' : 'Nuevo Artículo'}
+      title={item ? 'Modificar Artículo' : props.template ? `Nuevo Artículo (copia de ${props.template.fullCode})` : 'Nuevo Artículo'}
       subtitle={`Segmento: ${props.segmentLabel}\nFamilia: ${props.familyLabel}\nClase: ${props.itemClass.code} — ${props.itemClass.name}`}
       width="w-[760px]"
       onClose={onClose}
@@ -127,26 +130,28 @@ export function ArticleFormDialog(props: ArticleFormDialogProps) {
   )
 }
 
-function ArticleFormBody({ itemClass, item, familyName, onSaved, onClose }: ArticleFormDialogProps) {
+function ArticleFormBody({ itemClass, item, template, familyName, onSaved, onClose }: ArticleFormDialogProps) {
   const qc = useQueryClient()
   const isEdit = !!item
+  // Fields are seeded from the edited article or, when duplicating, from the source article.
+  const src = item ?? template
   const method = itemClass.weightMethod
   const manualWeight = !!itemClass.manualWeight
   const freeUnits = FREE_UNIT_SEGMENTS.has(itemClass.segmentCode)
   const boxes = manualWeight ? 0 : boxCount(method)
   const dimUnit = manualWeight ? null : dimUnitOf(method)
 
-  const [name, setName] = useState(item?.functionName ?? '')
-  const [abbr, setAbbr] = useState(item?.abbreviation ?? '')
+  const [name, setName] = useState(src?.functionName ?? '')
+  const [abbr, setAbbr] = useState(src?.abbreviation ?? '')
   const [dims, setDims] = useState<string[]>(() =>
-    [str(item?.dim2), str(item?.dim3), str(item?.dim4)].slice(0, boxes))
-  const [manualWeightText, setManualWeightText] = useState(str(item?.weight))
-  const [prov, setProv] = useState(item?.unitPurchase ?? (freeUnits ? '' : DEFAULT_UNIT))
-  const [cons, setCons] = useState(item?.unitConsumption ?? (freeUnits ? '' : DEFAULT_UNIT))
+    [str(src?.dim2), str(src?.dim3), str(src?.dim4)].slice(0, boxes))
+  const [manualWeightText, setManualWeightText] = useState(str(src?.weight))
+  const [prov, setProv] = useState(src?.unitPurchase ?? (freeUnits ? '' : DEFAULT_UNIT))
+  const [cons, setCons] = useState(src?.unitConsumption ?? (freeUnits ? '' : DEFAULT_UNIT))
   // A manual factor sticks only for the unit pair it was typed for. `undefined` = the user has not
   // touched it yet, so the override (if any) is derived from the stored item once equivalencies load.
   const [touchedManual, setManual] = useState<{ pair: string; value: string } | null | undefined>(undefined)
-  const [showWeight, setShowWeight] = useState(item?.showWeightInName ?? true)
+  const [showWeight, setShowWeight] = useState(src?.showWeightInName ?? true)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const { data: measures = [] } = useMeasures()
@@ -155,9 +160,9 @@ function ArticleFormBody({ itemClass, item, familyName, onSaved, onClose }: Arti
   const unitOptions = useMemo(() => {
     const base = freeUnits ? measures.map(m => m.name) : [DEFAULT_UNIT]
     // Never drop a stored unit the legacy rule would hide — it would silently change on save.
-    const extra = [item?.unitPurchase, item?.unitConsumption].filter((u): u is string => !!u)
+    const extra = [src?.unitPurchase, src?.unitConsumption].filter((u): u is string => !!u)
     return [...new Set([...base, ...extra])]
-  }, [freeUnits, measures, item?.unitPurchase, item?.unitConsumption])
+  }, [freeUnits, measures, src?.unitPurchase, src?.unitConsumption])
 
   const dimNums = dims.map(num)
   let weight: number | null = null
@@ -171,20 +176,20 @@ function ArticleFormBody({ itemClass, item, familyName, onSaved, onClose }: Arti
 
   const dimProduct = boxes > 0 ? dimProductOf(dimUnit, dimNums) : null
 
-  // Edit mode: the stored factor is a manual override only if the engine would not have produced it
+  // Edit/duplicate: the stored factor is a manual override only if the engine would not have produced it
   // for the stored units/dims/weight; otherwise the factor keeps recomputing live when dims change.
   const seededManual = (() => {
-    if (!item || !item.unitPurchase || !item.unitConsumption || !equivalenciesLoaded) return null
-    const storedDims = [item.dim2, item.dim3, item.dim4].slice(0, boxes).map(v => v ?? 0)
-    const storedComputed = computeUnitFactor(item.unitPurchase, item.unitConsumption, {
+    if (!src || !src.unitPurchase || !src.unitConsumption || !equivalenciesLoaded) return null
+    const storedDims = [src.dim2, src.dim3, src.dim4].slice(0, boxes).map(v => v ?? 0)
+    const storedComputed = computeUnitFactor(src.unitPurchase, src.unitConsumption, {
       equivalencies: equivalencies as UnitEquivalency[],
       dimUnit,
       dimProduct: boxes > 0 ? dimProductOf(dimUnit, storedDims) : null,
-      weight: item.weight != null ? round6(item.weight) : null,
+      weight: src.weight != null ? round6(src.weight) : null,
     })
-    const isOverride = storedComputed == null || roundFactor(item.unitConversionFactor) !== roundFactor(storedComputed)
+    const isOverride = storedComputed == null || roundFactor(src.unitConversionFactor) !== roundFactor(storedComputed)
     return isOverride
-      ? { pair: `${item.unitPurchase}|${item.unitConsumption}`, value: str(item.unitConversionFactor) }
+      ? { pair: `${src.unitPurchase}|${src.unitConsumption}`, value: str(src.unitConversionFactor) }
       : null
   })()
   const manual = touchedManual !== undefined ? touchedManual : seededManual
@@ -240,7 +245,7 @@ function ArticleFormBody({ itemClass, item, familyName, onSaved, onClose }: Arti
     // Mm./Kg.-Und/Und-Kg. have a single real dimension: dim3 is fixed to 1 (multiplicative identity)
     // so the weight calculator never sees a null.
     const mapped = boxes === 0
-      ? { dim2: item?.dim2 ?? null, dim3: item?.dim3 ?? null, dim4: item?.dim4 ?? null }
+      ? { dim2: src?.dim2 ?? null, dim3: src?.dim3 ?? null, dim4: src?.dim4 ?? null }
       : boxes === 1
         ? { dim2: d1 || null, dim3: 1, dim4: null }
         : boxes === 2
@@ -251,7 +256,7 @@ function ArticleFormBody({ itemClass, item, familyName, onSaved, onClose }: Arti
       functionName: name.trim(),
       abbreviation: abbr.trim() || null,
       ...mapped,
-      weight: item && !manualWeight && !method ? item.weight : weight,
+      weight: src && !manualWeight && !method ? src.weight : weight,
       unitPurchase: prov,
       unitConsumption: cons,
       unitConversionFactor: roundFactor(factorNum),
