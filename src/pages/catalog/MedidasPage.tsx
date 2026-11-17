@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { FormField, FormActions, ErrorBanner } from '@/components/ui/form-field'
 import { inputBase, inputError } from '@/components/ui/form-tokens'
+import { useUnitEquivalencies } from '@/hooks/useUnitData'
+import type { MeasureEquivalency } from '@/services/catalog.service'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,8 +18,24 @@ interface Equivalency { id: number; equivalentMeasureId: number; equivalentMeasu
 
 // ─── Equivalencies dialog ─────────────────────────────────────────────────────
 
-function EquivalencyRow({ eq, onDelete, deleting }: {
-  eq: Equivalency; onDelete: () => void; deleting: boolean
+const formatFactor = (n: number) => n.toLocaleString('es-AR', { maximumSignificantDigits: 10 })
+
+/** Read-only row for an equivalency stored on the other unit, shown inverted (1 / factor). */
+function InverseEquivalencyRow({ unit, eq }: { unit: string; eq: MeasureEquivalency }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-[#E4E7EC] bg-[#F9FAFB] px-4 py-2.5">
+      <span className="text-[14px] font-medium text-[#101828]">
+        1 <span className="text-[#667085]">{unit}</span> = <span className="text-[#2C6B2F] font-semibold">{formatFactor(1 / Number(eq.factor))}</span> {eq.fromUnit}
+      </span>
+      <span className="ml-auto text-[12px] text-[#98A2B3]" title={`Calculada desde 1 ${eq.fromUnit} = ${formatFactor(Number(eq.factor))} ${unit}`}>
+        desde {eq.fromUnit}
+      </span>
+    </div>
+  )
+}
+
+function EquivalencyRow({ unit, eq, onDelete, deleting }: {
+  unit: string; eq: Equivalency; onDelete: () => void; deleting: boolean
 }) {
   const [confirming, setConfirming] = useState(false)
   if (confirming) {
@@ -43,7 +61,7 @@ function EquivalencyRow({ eq, onDelete, deleting }: {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-[#E4E7EC] bg-white px-4 py-2.5">
       <span className="text-[14px] font-medium text-[#101828]">
-        1 <span className="text-[#667085]">unidad</span> = <span className="text-[#2C6B2F] font-semibold">{Number(eq.factor).toLocaleString('es-AR', { maximumFractionDigits: 8 })}</span> {eq.equivalentMeasureName}
+        1 <span className="text-[#667085]">{unit}</span> = <span className="text-[#2C6B2F] font-semibold">{formatFactor(Number(eq.factor))}</span> {eq.equivalentMeasureName}
       </span>
       <button
         onClick={() => setConfirming(true)}
@@ -65,6 +83,13 @@ function EquivalenciesDialog({ measure, onClose, allMeasures }: {
     queryKey: key,
     queryFn: () => apiClient.get<Equivalency[]>(`/measures/${measure.id}/equivalencies`).then(r => r.data),
   })
+  // Rows are stored in one direction only; show the ones stored on the other unit too.
+  const { data: allEquivalencies = [], isLoading: loadingAll, isError: allFailed } = useUnitEquivalencies()
+  const inverse = allEquivalencies.filter(e => e.toUnit === measure.name && Number(e.factor) > 0)
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: key })
+    qc.invalidateQueries({ queryKey: ['measure-equivalencies'] })
+  }
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: { equivalentMeasureId: '', factor: '' },
@@ -76,40 +101,49 @@ function EquivalenciesDialog({ measure, onClose, allMeasures }: {
         equivalentMeasureId: Number(d.equivalentMeasureId),
         factor: Number(d.factor),
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: key }); reset() },
+    onSuccess: () => { refresh(); reset() },
   })
 
   const deleteMut = useMutation({
     mutationFn: (equiId: number) => apiClient.delete(`/measures/${measure.id}/equivalencies/${equiId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onSuccess: refresh,
   })
 
+  // A pair already related in either direction can't be added again (it would duplicate the factor).
   const usedIds = new Set(equivalencies.map(e => e.equivalentMeasureId))
-  const available = allMeasures.filter(m => m.id !== measure.id && !usedIds.has(m.id))
+  const inverseNames = new Set(inverse.map(e => e.fromUnit))
+  const available = allMeasures.filter(m => m.id !== measure.id && !usedIds.has(m.id) && !inverseNames.has(m.name))
 
   return (
     <FormDialog open title={`Equivalencias — ${measure.name}`} onClose={onClose} width="w-[520px]">
       <div className="flex flex-col gap-5">
         {/* List */}
         <div className="flex flex-col gap-2">
-          {isLoading ? (
+          {isLoading || loadingAll ? (
             <p className="py-4 text-center text-[13px] text-[#98A2B3]">Cargando...</p>
-          ) : equivalencies.length === 0 ? (
+          ) : equivalencies.length === 0 && inverse.length === 0 ? (
             <p className="py-4 text-center text-[13px] text-[#98A2B3]">Sin equivalencias registradas</p>
           ) : (
-            equivalencies.map(eq => (
-              <EquivalencyRow
-                key={eq.id}
-                eq={eq}
-                onDelete={() => deleteMut.mutate(eq.id)}
-                deleting={deleteMut.isPending}
-              />
-            ))
+            <>
+              {equivalencies.map(eq => (
+                <EquivalencyRow
+                  key={eq.id}
+                  unit={measure.name}
+                  eq={eq}
+                  onDelete={() => deleteMut.mutate(eq.id)}
+                  deleting={deleteMut.isPending}
+                />
+              ))}
+              {inverse.map(eq => <InverseEquivalencyRow key={`inv-${eq.id}`} unit={measure.name} eq={eq} />)}
+            </>
           )}
         </div>
 
+        {/* Without the full list we can't tell which pairs already exist in reverse, so don't allow adding. */}
+        {allFailed && <ErrorBanner message="No se pudieron cargar todas las equivalencias. Cerrá y volvé a abrir para reintentar." />}
+
         {/* Add form */}
-        {available.length > 0 && (
+        {!allFailed && available.length > 0 && (
           <>
             <div className="border-t border-[#F2F4F7]" />
             <form onSubmit={handleSubmit(d => addMut.mutate(d))} className="flex flex-col gap-4">
