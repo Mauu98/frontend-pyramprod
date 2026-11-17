@@ -2,8 +2,10 @@
  * Unit conversion factor engine for items ("1 <provision> equivale a F <consumption>").
  *
  * Generalizes the legacy cambi_med algorithm to a conversion graph: nodes are unit names,
- * edges are company equivalencies plus two item-specific edges (the item's dimension product
- * and its weight). The factor is the product of edge factors along a BFS path.
+ * edges are company equivalencies plus the item-specific edges of the specific-weight formula
+ * (weight = specific weight x volume): its dimension product, its volume and its weight.
+ * Any weight unit reaches Kg. and any volume unit reaches Mm3. through company equivalencies.
+ * The factor is the product of edge factors along a BFS path.
  */
 
 export interface UnitEquivalency {
@@ -23,11 +25,14 @@ export interface ItemFactorContext {
   dimProduct?: number | null
   /** Item weight in Kg. (1 Und = weight Kg.). */
   weight?: number | null
+  /** Item volume in Mm3. (1 Und = volume Mm3.): dimension product x the class fixed dimension. */
+  volume?: number | null
 }
 
 export const FACTOR_DECIMALS = 8
 const ITEM_UNIT = 'Und'
 const WEIGHT_UNIT = 'Kg.'
+const VOLUME_UNIT = 'Mm3.'
 
 export function roundFactor(value: number): number {
   return Number(value.toFixed(FACTOR_DECIMALS))
@@ -36,7 +41,7 @@ export function roundFactor(value: number): number {
 interface Edge { to: string; factor: number }
 
 /**
- * Adjacency with legacy cambi_med priority per node: item edges (Und<->dimUnit, Und<->Kg.) first,
+ * Adjacency with legacy cambi_med priority per node: item edges (Und<->dimUnit, Und<->Kg., Und<->Mm3.) first,
  * then forward company rows, then inverted company rows.
  */
 function buildGraph(ctx: ItemFactorContext): Map<string, Edge[]> {
@@ -59,6 +64,8 @@ function buildGraph(ctx: ItemFactorContext): Map<string, Edge[]> {
   }
   if (ctx.dimUnit) linkItem(ITEM_UNIT, ctx.dimUnit, ctx.dimProduct)
   linkItem(ITEM_UNIT, WEIGHT_UNIT, ctx.weight)
+  // A Mm3. class already links Und<->Mm3. through its dimension product, which equals its volume.
+  if (ctx.dimUnit !== VOLUME_UNIT) linkItem(ITEM_UNIT, VOLUME_UNIT, ctx.volume)
 
   const graph = new Map<string, Edge[]>()
   const units = new Set([...itemEdges.keys(), ...forward.keys(), ...inverted.keys()])

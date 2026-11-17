@@ -83,4 +83,45 @@ describe('computeUnitFactor', () => {
     }
     expect(computeUnitFactor('Und', 'X', ctx)).toBe(10)
   })
+
+  describe('specific-weight formula (volume edge)', () => {
+    // Planchuela 1"x1/8": section 81.28 Mm2. fixed in the class, item length 6000 Mm., sw 7850 Kg/M3.
+    const volEqs = [
+      kgGr,
+      { fromUnit: 'M3.', toUnit: 'Mm3.', factor: 1e9 },
+      { fromUnit: 'M3.', toUnit: 'Lts.', factor: 1000 },
+    ]
+    const bar: ItemFactorContext = {
+      equivalencies: volEqs, dimUnit: 'Mm.', dimProduct: 6000, weight: 3.828288, volume: 6000 * 81.28,
+    }
+
+    it('Und -> Mm3. is the item volume', () => {
+      expect(computeUnitFactor('Und', 'Mm3.', bar)).toBe(487680)
+    })
+
+    it('Und -> Lts. chains the inverse M3./Mm3. row and M3./Lts.', () => {
+      expect(computeUnitFactor('Und', 'Lts.', bar)).toBe(0.48768)
+    })
+
+    it('Kg. -> M3. is the inverse specific weight', () => {
+      expect(computeUnitFactor('Kg.', 'M3.', bar)).toBe(0.00012739)
+    })
+
+    it('Gr. -> Lts. converts weight and volume units on both sides', () => {
+      expect(computeUnitFactor('Gr.', 'Lts.', bar)).toBe(0.00012739)
+    })
+
+    it('Lts. -> Mm. solves the length from the volume', () => {
+      expect(computeUnitFactor('Lts.', 'Mm.', bar)).toBe(12303.1496063)
+    })
+
+    it('no volume edge without a volume', () => {
+      expect(computeUnitFactor('Und', 'Lts.', { ...bar, volume: null })).toBeNull()
+    })
+
+    it('a Mm3. class keeps a single Und -> Mm3. edge from its boxes', () => {
+      const ctx: ItemFactorContext = { equivalencies: volEqs, dimUnit: 'Mm3.', dimProduct: 500, weight: null, volume: 500 }
+      expect(computeUnitFactor('Und', 'Lts.', ctx)).toBe(0.0005)
+    })
+  })
 })

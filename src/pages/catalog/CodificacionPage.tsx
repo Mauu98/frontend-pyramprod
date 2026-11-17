@@ -575,16 +575,16 @@ function ItemsColumn({
 
   return (
     <div className={cn(
-      'flex w-[320px] min-w-[260px] shrink flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
+      'flex w-[320px] min-w-[300px] shrink flex-col border-r border-gray-200 bg-white transition-opacity duration-150',
       !enabled && 'pointer-events-none opacity-25',
     )}>
-      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-100 bg-[#f7f8fa] pl-5 pr-7">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-100 bg-[#f7f8fa] pl-4 pr-4">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2C6B2F]/10">
           <Tag size={14} className="text-[#2C6B2F]" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-[#374151]">Items</p>
-          <p className="text-[11px] text-slate-400">{rows.length} registros</p>
+          <p className="truncate text-[13px] font-semibold text-[#374151]">Items</p>
+          <p className="truncate text-[11px] text-slate-400">{rows.length} registros</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button

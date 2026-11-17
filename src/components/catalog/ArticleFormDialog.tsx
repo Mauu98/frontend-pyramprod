@@ -76,6 +76,17 @@ function dimProductOf(dimUnit: string | null, d: number[]): number | null {
   return dimUnit ? d.reduce((a, b) => a * b, 1) : null
 }
 
+/**
+ * Item volume in Mm3. for the specific-weight formula: the boxes times the class fixed dimension
+ * (section for Mm., thickness for Mm2.); for Mm3. the boxes already are the volume.
+ */
+function volumeOf(cls: ItemClass, dimUnit: string | null, dimProduct: number | null): number | null {
+  if (dimProduct == null || !dimUnit) return null
+  if (dimUnit === 'Mm3.') return dimProduct
+  const nd = cls.nominalDimension
+  return nd != null && nd > 0 ? dimProduct * nd : null
+}
+
 /** Live weight (Kg.); the backend recomputes and is authoritative. */
 function calcWeight(cls: ItemClass, method: WeightMethod, d: number[]): number | null {
   const sw = cls.specificWeight ?? 0
@@ -192,11 +203,13 @@ function ArticleFormBody({ itemClass, item, template, familyName, onSaved, onClo
   const seededManual = (() => {
     if (!src || !src.unitPurchase || !src.unitConsumption || !equivalenciesLoaded) return null
     const storedDims = [src.dim2, src.dim3, src.dim4].slice(0, boxes).map(v => v ?? 0)
+    const storedProduct = boxes > 0 ? dimProductOf(dimUnit, storedDims) : null
     const storedComputed = computeUnitFactor(src.unitPurchase, src.unitConsumption, {
       equivalencies: equivalencies as UnitEquivalency[],
       dimUnit,
-      dimProduct: boxes > 0 ? dimProductOf(dimUnit, storedDims) : null,
+      dimProduct: storedProduct,
       weight: src.weight != null ? round6(src.weight) : null,
+      volume: volumeOf(itemClass, dimUnit, storedProduct),
     })
     const isOverride = storedComputed == null || roundFactor(src.unitConversionFactor) !== roundFactor(storedComputed)
     return isOverride
@@ -206,7 +219,13 @@ function ArticleFormBody({ itemClass, item, template, familyName, onSaved, onClo
   const manual = touchedManual !== undefined ? touchedManual : seededManual
 
   const computed = prov && cons
-    ? computeUnitFactor(prov, cons, { equivalencies: equivalencies as UnitEquivalency[], dimUnit, dimProduct, weight })
+    ? computeUnitFactor(prov, cons, {
+      equivalencies: equivalencies as UnitEquivalency[],
+      dimUnit,
+      dimProduct,
+      weight,
+      volume: volumeOf(itemClass, dimUnit, dimProduct),
+    })
     : null
 
   const pair = `${prov}|${cons}`
