@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as XLSX from 'xlsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -40,6 +41,18 @@ type SheetKind = 'segment' | 'family' | 'item-class' | 'item' | 'batch' | 'renam
 interface ColRow { id: number; code: string; name: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Marks every cached catalog list and item detail as stale. Renaming a family or class makes the
+ * backend recompose the names of all its items (and segment-8 mirror families), so refreshing only
+ * the edited list would leave stale item names on screen.
+ */
+function invalidateCatalogNames(qc: QueryClient) {
+  for (const key of ['families', 'families-all', 'item-classes', 'items', 'item-detail']) {
+    qc.invalidateQueries({ queryKey: [key] })
+  }
+}
+
 // ─── Stat tile ────────────────────────────────────────────────────────────────
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -1079,7 +1092,7 @@ function FamilyForm({ item, segmentId, segmentLabel, onSave, onClose }: {
   })
   const m = useMutation({
     mutationFn: (d: object) => item ? apiClient.put(`/families/${item.id}`, d) : apiClient.post('/families', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['families', segmentId] }); onSave() },
+    onSuccess: () => { invalidateCatalogNames(qc); onSave() },
   })
   return (
     <form onSubmit={handleSubmit(d => m.mutate(d))} className="flex flex-col gap-7">
@@ -1658,7 +1671,7 @@ function ItemClassForm({ item, template, familyId, familyLabel, segmentCode, exi
 
   const m = useMutation({
     mutationFn: (d: object) => item ? apiClient.put(`/item-classes/${item.id}`, d) : apiClient.post('/item-classes', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['item-classes', familyId] }); onSave() },
+    onSuccess: () => { invalidateCatalogNames(qc); onSave() },
   })
 
   const onSubmit = (v: Record<string, string>) => {
@@ -2608,7 +2621,7 @@ export function CodificacionPage() {
             familyId={renameTarget.id}
             familyLabel={renameTarget.label}
             onSave={() => {
-              qc.invalidateQueries({ queryKey: ['item-classes', renameTarget.id] })
+              invalidateCatalogNames(qc)
               closeRename()
             }}
             onClose={closeRename}
